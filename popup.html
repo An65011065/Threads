@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="popup.css" />
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>🌐 Browsing Graph</h1>
+            </header>
+
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-number" id="nodeCount">0</span>
+                    <span class="stat-label">Total Visits</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="edgeCount">0</span>
+                    <span class="stat-label">Connections</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="sessionCount">0</span>
+                    <span class="stat-label">Active Tabs</span>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="viewGraph" class="primary-btn">View Graph</button>
+                <button id="clearData" class="secondary-btn">Clear Data</button>
+                <button id="testData" class="test-btn">Add Test Data</button>
+            </div>
+
+            <div class="recent-activity">
+                <h3>Recent Sessions</h3>
+                <div id="recentList" class="activity-list">
+                    <div class="loading">Collecting data...</div>
+                </div>
+            </div>
+
+            <div class="status">
+                <span id="statusText">🟢 Tracking active</span>
+            </div>
+        </div>
+
+        <script src="popup.js"></script>
+    </body>
+</html>
