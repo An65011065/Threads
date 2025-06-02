@@ -212,11 +212,29 @@ function updateRecentActivity(data) {
 }
 
 function setupEventListeners() {
-    // View Graph button
-    document.getElementById("viewGraph").addEventListener("click", () => {
-        chrome.tabs.create({
-            url: chrome.runtime.getURL("graph.html"),
-        });
+    // View Graph button - FIXED: Store data and open graph
+    document.getElementById("viewGraph").addEventListener("click", async () => {
+        try {
+            // Get fresh data for the graph
+            const data = await chrome.runtime.sendMessage({
+                action: "getData",
+            });
+
+            if (data && !data.error) {
+                // Store data in chrome storage for the graph page to access
+                await chrome.storage.local.set({ graphData: data });
+
+                // Open the graph page
+                chrome.tabs.create({
+                    url: chrome.runtime.getURL("graph.html"),
+                });
+            } else {
+                showError("No data available for graph");
+            }
+        } catch (error) {
+            console.error("Error opening graph:", error);
+            showError("Failed to open graph");
+        }
     });
 
     document.getElementById("clearData").addEventListener("click", async () => {

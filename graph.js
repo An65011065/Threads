@@ -7,6 +7,7 @@ class BrowsingGraphVisualizer {
         this.clusters = new Map();
         this.selectedNode = null;
         this.zoomBehavior = null;
+        this.expandedMode = true; // Expanded mode default ON
 
         this.width = window.innerWidth;
         this.height = window.innerHeight - 120; // Account for header and stats
@@ -30,37 +31,6 @@ class BrowsingGraphVisualizer {
             .attr("width", this.width)
             .attr("height", this.height);
 
-        // Define arrow markers
-        const defs = this.svg.append("defs");
-
-        // Arrow for intra-tab links
-        defs.append("marker")
-            .attr("id", "arrowIntra")
-            .attr("viewBox", "0 -5 10 10")
-            .attr("refX", 20)
-            .attr("refY", 0)
-            .attr("markerWidth", 6)
-            .attr("markerHeight", 6)
-            .attr("orient", "auto")
-            .append("path")
-            .attr("d", "M0,-5L10,0L0,5")
-            .attr("class", "arrow")
-            .style("fill", "#4c51bf");
-
-        // Arrow for inter-tab links
-        defs.append("marker")
-            .attr("id", "arrowInter")
-            .attr("viewBox", "0 -5 10 10")
-            .attr("refX", 20)
-            .attr("refY", 0)
-            .attr("markerWidth", 6)
-            .attr("markerHeight", 6)
-            .attr("orient", "auto")
-            .append("path")
-            .attr("d", "M0,-5L10,0L0,5")
-            .attr("class", "arrow")
-            .style("fill", "#e53e3e");
-
         // Setup zoom
         this.zoomBehavior = d3
             .zoom()
@@ -79,21 +49,20 @@ class BrowsingGraphVisualizer {
 
     setupFilters() {
         const showInactive = document.getElementById("showInactive");
-        const minVisits = document.getElementById("minVisits");
-        const minVisitsValue = document.getElementById("minVisitsValue");
         const showLabels = document.getElementById("showLabels");
+        const expandedMode = document.getElementById("expandedMode");
 
         showInactive.addEventListener("change", () => this.updateGraph());
-
-        minVisits.addEventListener("input", (e) => {
-            minVisitsValue.textContent = e.target.value;
-            this.updateGraph();
-        });
 
         showLabels.addEventListener("change", () => {
             this.svg
                 .selectAll(".node text")
                 .style("display", showLabels.checked ? "block" : "none");
+        });
+
+        expandedMode.addEventListener("change", () => {
+            this.expandedMode = expandedMode.checked;
+            this.loadData(); // Reload and reprocess data
         });
     }
 
@@ -101,9 +70,6 @@ class BrowsingGraphVisualizer {
         document
             .getElementById("refreshBtn")
             .addEventListener("click", () => this.loadData());
-        document
-            .getElementById("resetZoom")
-            .addEventListener("click", () => this.resetZoom());
         document
             .getElementById("exportBtn")
             .addEventListener("click", () => this.exportGraph());
@@ -114,13 +80,32 @@ class BrowsingGraphVisualizer {
         loading.classList.remove("hidden");
 
         try {
-            const data = await chrome.runtime.sendMessage({
-                action: "getData",
-            });
+            console.log("📦 Loading graph data from storage...");
+
+            const result = await chrome.storage.local.get(["graphData"]);
+            const data = result.graphData;
+
             console.log("📦 Graph received data:", data);
+
+            if (!data) {
+                throw new Error(
+                    "No graph data found. Please open graph from extension popup.",
+                );
+            }
 
             if (data.error) {
                 throw new Error(data.error);
+            }
+
+            // Add validation for required data structure
+            if (!data.sessions || !Array.isArray(data.sessions)) {
+                throw new Error(
+                    "Invalid data format: missing or invalid sessions array",
+                );
+            }
+
+            if (data.sessions.length === 0) {
+                throw new Error("No browsing sessions found");
             }
 
             this.processData(data);
@@ -128,7 +113,7 @@ class BrowsingGraphVisualizer {
             this.createGraph();
         } catch (error) {
             console.error("❌ Error loading graph data:", error);
-            this.showError("Failed to load browsing data");
+            this.showError(error.message || "Failed to load browsing data");
         } finally {
             loading.classList.add("hidden");
         }
@@ -138,98 +123,142 @@ class BrowsingGraphVisualizer {
         this.nodes = [];
         this.links = [];
         this.clusters.clear();
-
-        const nodeMap = new Map(); // To avoid duplicate nodes
+        const nodeMap = new Map();
         let nodeId = 0;
 
-        // Process each session (tab)
-        data.sessions.forEach((session, sessionIndex) => {
-            if (!session.domains || session.domains.length === 0) return;
-
-            const clusterId = session.tabId;
-            const clusterColor = this.getClusterColor(sessionIndex);
-
-            this.clusters.set(clusterId, {
-                id: clusterId,
-                sessionId: session.sessionId,
-                isActive: session.isActive,
-                color: clusterColor,
-                nodes: [],
-            });
-
-            let previousNode = null;
-
-            // Create nodes for each domain in navigation order
-            session.domains.forEach((domain, domainIndex) => {
-                // Create a unique node for each domain in this tab
-                const nodeKey = `${clusterId}-${domain.domain}`;
-
-                if (!nodeMap.has(nodeKey)) {
-                    const node = {
-                        id: nodeId++,
-                        domain: domain.domain,
-                        visitCount: domain.visitCount,
-                        urls: domain.urls || [],
-                        tabId: clusterId,
-                        sessionId: session.sessionId,
-                        isActive: session.isActive,
-                        cluster: clusterId,
-                        clusterColor: clusterColor,
-                        x: this.width / 2 + (Math.random() - 0.5) * 100,
-                        y: this.height / 2 + (Math.random() - 0.5) * 100,
-                    };
-
-                    this.nodes.push(node);
-                    nodeMap.set(nodeKey, node);
-                    this.clusters.get(clusterId).nodes.push(node);
-                }
-
-                const currentNode = nodeMap.get(nodeKey);
-
-                // Create edge from previous node in the sequence
-                if (previousNode && previousNode.id !== currentNode.id) {
-                    this.links.push({
-                        source: previousNode.id,
-                        target: currentNode.id,
-                        type: "intra-tab",
-                        tabId: clusterId,
+        if (this.expandedMode) {
+            // EXPANDED MODE: Each URL is a node, edges are visit order
+            data.sessions.forEach((session, sessionIndex) => {
+                if (!session.domains || session.domains.length === 0) return;
+                const clusterId = session.tabId;
+                const clusterColor = this.getClusterColor(sessionIndex);
+                this.clusters.set(clusterId, {
+                    id: clusterId,
+                    sessionId: session.sessionId,
+                    isActive: session.isActive,
+                    color: clusterColor,
+                    nodes: [],
+                });
+                let previousNode = null;
+                session.domains.forEach((domain) => {
+                    (domain.urls || []).forEach((url, urlIndex) => {
+                        const nodeKey = `${clusterId}-${url}`;
+                        if (!nodeMap.has(nodeKey)) {
+                            const node = {
+                                id: nodeId++,
+                                url: url,
+                                domain: domain.domain,
+                                visitCount: 1, // Each URL node is a single visit
+                                tabId: clusterId,
+                                sessionId: session.sessionId,
+                                isActive: session.isActive,
+                                cluster: clusterId,
+                                clusterColor: clusterColor,
+                                x: this.width / 2 + (Math.random() - 0.5) * 100,
+                                y:
+                                    this.height / 2 +
+                                    (Math.random() - 0.5) * 100,
+                            };
+                            this.nodes.push(node);
+                            nodeMap.set(nodeKey, node);
+                            this.clusters.get(clusterId).nodes.push(node);
+                        }
+                        const currentNode = nodeMap.get(nodeKey);
+                        // Create edge from previous URL in the sequence (within tab)
+                        if (
+                            previousNode &&
+                            previousNode.tabId === currentNode.tabId
+                        ) {
+                            this.links.push({
+                                source: previousNode.id,
+                                target: currentNode.id,
+                                type: "intra-tab",
+                                tabId: clusterId,
+                            });
+                        }
+                        previousNode = currentNode;
                     });
-                }
-
-                previousNode = currentNode;
+                });
             });
-        });
-
-        // Add inter-tab relationships as links
-        if (data.tabRelationships) {
-            data.tabRelationships.forEach((relationship) => {
-                const parentCluster = this.clusters.get(
-                    relationship.parentTabId,
-                );
-                const childCluster = this.clusters.get(relationship.childTabId);
-
-                if (
-                    parentCluster &&
-                    childCluster &&
-                    parentCluster.nodes.length > 0 &&
-                    childCluster.nodes.length > 0
-                ) {
-                    // Connect the last node of parent tab to first node of child tab
-                    const parentNode =
-                        parentCluster.nodes[parentCluster.nodes.length - 1];
-                    const childNode = childCluster.nodes[0];
-
-                    this.links.push({
-                        source: parentNode.id,
-                        target: childNode.id,
-                        type: "inter-tab",
-                        parentTabId: relationship.parentTabId,
-                        childTabId: relationship.childTabId,
-                    });
-                }
+            // No inter-tab edges in expanded mode (first URL in a tab has no incoming edge)
+        } else {
+            // COLLAPSED MODE: Original domain-based logic
+            // ... existing code for domain-based nodes and links ...
+            const nodeMap = new Map(); // To avoid duplicate nodes
+            let nodeId = 0;
+            data.sessions.forEach((session, sessionIndex) => {
+                if (!session.domains || session.domains.length === 0) return;
+                const clusterId = session.tabId;
+                const clusterColor = this.getClusterColor(sessionIndex);
+                this.clusters.set(clusterId, {
+                    id: clusterId,
+                    sessionId: session.sessionId,
+                    isActive: session.isActive,
+                    color: clusterColor,
+                    nodes: [],
+                });
+                let previousNode = null;
+                session.domains.forEach((domain, domainIndex) => {
+                    const nodeKey = `${clusterId}-${domain.domain}`;
+                    if (!nodeMap.has(nodeKey)) {
+                        const node = {
+                            id: nodeId++,
+                            domain: domain.domain,
+                            visitCount: domain.visitCount,
+                            urls: domain.urls || [],
+                            tabId: clusterId,
+                            sessionId: session.sessionId,
+                            isActive: session.isActive,
+                            cluster: clusterId,
+                            clusterColor: clusterColor,
+                            x: this.width / 2 + (Math.random() - 0.5) * 100,
+                            y: this.height / 2 + (Math.random() - 0.5) * 100,
+                        };
+                        this.nodes.push(node);
+                        nodeMap.set(nodeKey, node);
+                        this.clusters.get(clusterId).nodes.push(node);
+                    }
+                    const currentNode = nodeMap.get(nodeKey);
+                    if (previousNode && previousNode.id !== currentNode.id) {
+                        this.links.push({
+                            source: previousNode.id,
+                            target: currentNode.id,
+                            type: "intra-tab",
+                            tabId: clusterId,
+                        });
+                    }
+                    previousNode = currentNode;
+                });
             });
+            // Add inter-tab relationships as links
+            if (data.tabRelationships) {
+                data.tabRelationships.forEach((relationship) => {
+                    const parentCluster = this.clusters.get(
+                        relationship.parentTabId,
+                    );
+                    const childCluster = this.clusters.get(
+                        relationship.childTabId,
+                    );
+                    if (
+                        parentCluster &&
+                        childCluster &&
+                        parentCluster.nodes.length > 0 &&
+                        childCluster.nodes.length > 0
+                    ) {
+                        const parentNode =
+                            parentCluster.nodes[parentCluster.nodes.length - 1];
+                        const childNode = childCluster.nodes[0];
+                        this.links.push({
+                            source: parentNode.id,
+                            target: childNode.id,
+                            type: "inter-tab",
+                            parentTabId: relationship.parentTabId,
+                            childTabId: relationship.childTabId,
+                        });
+                    }
+                });
+            }
         }
-
         console.log(
             `📊 Processed: ${this.nodes.length} nodes, ${this.links.length} links, ${this.clusters.size} clusters`,
         );
@@ -287,11 +316,11 @@ class BrowsingGraphVisualizer {
             .enter()
             .append("path")
             .attr("class", (d) => `link ${d.type}`)
-            .attr("marker-end", (d) =>
-                d.type === "intra-tab"
-                    ? "url(#arrowIntra)"
-                    : "url(#arrowInter)",
+            .style("stroke", (d) =>
+                d.type === "intra-tab" ? "#00eaff" : "#ff0055",
             )
+            .style("stroke-width", 3)
+            .style("opacity", 0.9)
             .on("mouseover", (event, d) => this.showLinkTooltip(event, d))
             .on("mouseout", () => this.hideTooltip());
     }
@@ -327,7 +356,7 @@ class BrowsingGraphVisualizer {
         this.nodeElements
             .append("text")
             .text((d) => this.getNodeLabel(d))
-            .attr("dy", (d) => Math.max(5, Math.min(15, d.visitCount * 2)) + 15)
+            .attr("dy", (d) => Math.max(5, Math.min(15, d.visitCount * 2)) + 20)
             .style(
                 "display",
                 document.getElementById("showLabels").checked
@@ -351,17 +380,18 @@ class BrowsingGraphVisualizer {
                 d3
                     .forceLink(this.links)
                     .id((d) => d.id)
-                    .distance(80)
+                    .distance(100)
                     .strength(0.8),
             )
-            .force("charge", d3.forceManyBody().strength(-300).distanceMax(200))
+            .force("charge", d3.forceManyBody().strength(-600).distanceMax(300))
             .force("center", d3.forceCenter(this.width / 2, this.height / 2))
             .force(
                 "collision",
                 d3
                     .forceCollide()
                     .radius(
-                        (d) => Math.max(5, Math.min(15, d.visitCount * 2)) + 5,
+                        (d) =>
+                            Math.max(18, Math.min(25, d.visitCount * 2)) + 10,
                     ),
             )
             .force("cluster", this.forceCluster())
@@ -403,20 +433,12 @@ class BrowsingGraphVisualizer {
         this.linkElements.attr("d", (d) => {
             const sourceNode = this.nodes.find((n) => n.id === d.source.id);
             const targetNode = this.nodes.find((n) => n.id === d.target.id);
-
             if (!sourceNode || !targetNode) return "";
-
-            // Create curved path
-            const dx = targetNode.x - sourceNode.x;
-            const dy = targetNode.y - sourceNode.y;
-            const dr = Math.sqrt(dx * dx + dy * dy) * 0.3;
-
-            return `M${sourceNode.x},${sourceNode.y}A${dr},${dr} 0 0,1 ${targetNode.x},${targetNode.y}`;
+            // STRAIGHT LINE INSTEAD OF CURVE
+            return `M${sourceNode.x},${sourceNode.y}L${targetNode.x},${targetNode.y}`;
         });
-
         // Update node positions
         this.nodeElements.attr("transform", (d) => `translate(${d.x},${d.y})`);
-
         // Update cluster hulls
         this.updateClusterHulls();
     }
@@ -472,12 +494,10 @@ class BrowsingGraphVisualizer {
 
     updateGraph() {
         const showInactive = document.getElementById("showInactive").checked;
-        const minVisits = parseInt(document.getElementById("minVisits").value);
 
         // Filter nodes based on criteria
         const filteredNodes = this.nodes.filter((node) => {
             if (!showInactive && !node.isActive) return false;
-            if (node.visitCount < minVisits) return false;
             return true;
         });
 
@@ -527,30 +547,37 @@ class BrowsingGraphVisualizer {
 
     updateNodeInfo(node) {
         const nodeInfo = document.getElementById("nodeInfo");
-        nodeInfo.innerHTML = `
-            <h4>${node.domain}</h4>
-            <p><strong>Visit Count:</strong> ${node.visitCount}</p>
-            <p><strong>Tab:</strong> ${node.tabId} ${
-            node.isActive ? "(Active)" : "(Closed)"
-        }</p>
-            <p><strong>URLs Visited:</strong></p>
-            <ul style="margin: 5px 0; padding-left: 15px; font-size: 11px;">
-                ${node.urls
-                    .slice(0, 5)
-                    .map(
-                        (url) =>
-                            `<li title="${url}">${this.truncateUrl(url)}</li>`,
-                    )
-                    .join("")}
-                ${
-                    node.urls.length > 5
-                        ? `<li><em>...and ${
-                              node.urls.length - 5
-                          } more</em></li>`
-                        : ""
-                }
-            </ul>
-        `;
+        if (this.expandedMode) {
+            // Show full URL and domain
+            nodeInfo.innerHTML = `
+                <h4>${node.domain}</h4>
+                <p><strong>URL:</strong> <span title="${
+                    node.url
+                }">${this.truncateUrl(node.url)}</span></p>
+                <p><strong>Tab:</strong> ${node.tabId} ${
+                node.isActive ? "(Active)" : "(Closed)"
+            }</p>
+            `;
+        } else {
+            nodeInfo.innerHTML = `
+                <h4>${node.domain}</h4>
+                <p><strong>Visit Count:</strong> ${node.visitCount}</p>
+                <p><strong>Tab:</strong> ${node.tabId} ${
+                node.isActive ? "(Active)" : "(Closed)"
+            }</p>
+                <p><strong>URLs Visited:</strong></p>
+                <ul style="margin: 5px 0; padding-left: 15px; font-size: 11px;">
+                    ${node.urls
+                        .map(
+                            (url) =>
+                                `<li title="${url}">${this.truncateUrl(
+                                    url,
+                                )}</li>`,
+                        )
+                        .join("")}
+                </ul>
+            `;
+        }
     }
 
     truncateUrl(url) {
@@ -592,9 +619,8 @@ class BrowsingGraphVisualizer {
 
     updateStats(data) {
         document.getElementById("tabCount").textContent = data.totalSessions;
-        document.getElementById("nodeCount").textContent = this.nodes.length;
         document.getElementById("edgeCount").textContent = this.links.length;
-        document.getElementById("visitCount").textContent = data.totalVisits;
+        document.getElementById("visitCount").textContent = this.nodes.length;
     }
 
     resetZoom() {
@@ -629,13 +655,34 @@ class BrowsingGraphVisualizer {
             .attr("fill", "white")
             .attr("font-size", "18px")
             .text(
-                "No browsing data available. Start browsing to see your graph!",
+                "No browsing data available. Open this graph from the extension popup.",
             );
     }
 
     showError(message) {
         console.error(message);
-        // You could show an error state here
+
+        // Show error in the UI
+        const container = this.svg.select(".graph-container");
+        container.selectAll("*").remove();
+
+        container
+            .append("text")
+            .attr("x", this.width / 2)
+            .attr("y", this.height / 2 - 20)
+            .attr("text-anchor", "middle")
+            .attr("fill", "var(--primary-text)")
+            .attr("font-size", "18px")
+            .text("❌ " + message);
+
+        container
+            .append("text")
+            .attr("x", this.width / 2)
+            .attr("y", this.height / 2 + 20)
+            .attr("text-anchor", "middle")
+            .attr("fill", "var(--secondary-text)")
+            .attr("font-size", "14px")
+            .text("Please open the graph from the extension popup");
     }
 
     handleResize() {
