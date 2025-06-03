@@ -69,6 +69,11 @@ class BrowsingGraphVisualizer {
         document
             .getElementById("exportBtn")
             .addEventListener("click", () => this.exportGraph());
+
+        // Add click handler for link evolution
+        document
+            .querySelector(".link-evolution")
+            .addEventListener("click", () => this.showTimelineView());
     }
 
     async loadData() {
@@ -258,7 +263,7 @@ class BrowsingGraphVisualizer {
             });
         }
 
-        document.getElementById("urlCount").textContent = urlsLast24h;
+        document.getElementById("urlCount").textContent = `${urlsLast24h} tabs`;
     }
 
     updateMetricsDisplay(hoveredNode = null) {
@@ -417,12 +422,47 @@ class BrowsingGraphVisualizer {
         }
     }
 
+    cleanUrl(url) {
+        if (!url) return url;
+
+        try {
+            const urlObj = new URL(url);
+            const hostname = urlObj.hostname.toLowerCase();
+
+            // Clean Google search URLs only
+            if (hostname.includes("google.com")) {
+                const searchParams = new URLSearchParams(urlObj.search);
+                const query = searchParams.get("q");
+                if (query) {
+                    // Clean up the search term - remove special characters and spaces
+                    const cleanQuery = query
+                        .replace(/[^a-zA-Z0-9\s]/g, "")
+                        .replace(/\s+/g, "");
+                    return `google.com/${cleanQuery}`;
+                }
+                return "google.com";
+            }
+
+            // For all other URLs (including YouTube and X), return the original
+            return url;
+        } catch (e) {
+            // If URL parsing fails, return original
+            return url;
+        }
+    }
+
     handleNodeHover(event, node) {
-        // Update URL display box
+        // Update URL display box with cluster's first URL
+        const cluster = this.clusters.get(node.tabId);
+        const clusterFirstUrl = cluster
+            ? this.cleanUrl(cluster.firstUrl)
+            : "unknown";
         document.getElementById(
             "clusterInfo",
-        ).textContent = `tab cluster: ${node.tabId}`;
-        document.getElementById("urlInfo").textContent = node.url;
+        ).textContent = `tab cluster: ${clusterFirstUrl}`;
+
+        const cleanedUrl = this.cleanUrl(node.url);
+        document.getElementById("urlInfo").textContent = cleanedUrl;
 
         // Update metrics to show node-specific values
         this.updateMetricsDisplay(node);
@@ -433,7 +473,7 @@ class BrowsingGraphVisualizer {
 
     handleNodeOut() {
         // Reset URL display box
-        document.getElementById("clusterInfo").textContent = "tab cluster: -";
+        document.getElementById("clusterInfo").textContent = "tab cluster:";
         document.getElementById("urlInfo").textContent =
             "Hover over a node to see details";
 
@@ -661,13 +701,15 @@ class BrowsingGraphVisualizer {
             });
         }
 
+        const cleanedUrl = this.cleanUrl(node.url);
+        const displayUrl =
+            cleanedUrl.length > 50
+                ? cleanedUrl.substring(0, 47) + "..."
+                : cleanedUrl;
+
         tooltip.innerHTML = `
             <strong>${node.domain}</strong><br>
-            <em>${
-                node.url.length > 50
-                    ? node.url.substring(0, 47) + "..."
-                    : node.url
-            }</em><br>
+            <em>${displayUrl}</em><br>
             Dwell: ${node.dwellTime.toFixed(1)}s<br>
             Entropy: ${node.entropy.toFixed(2)}<br>
             Return: ${node.returnVelocity.toFixed(1)}%
@@ -724,9 +766,15 @@ class BrowsingGraphVisualizer {
 
     showNodeTooltip(event, node) {
         const tooltip = document.getElementById("tooltip");
+        const cleanedUrl = this.cleanUrl(node.url);
+        const displayUrl =
+            cleanedUrl.length > 50
+                ? cleanedUrl.substring(0, 47) + "..."
+                : cleanedUrl;
+
         tooltip.innerHTML = `
             <strong>${node.domain}</strong><br>
-            <em>${node.url}</em><br>
+            <em>${displayUrl}</em><br>
             Dwell: ${node.dwellTime.toFixed(1)}s<br>
             Entropy: ${node.entropy.toFixed(2)}<br>
             Return: ${node.returnVelocity.toFixed(1)}%
@@ -841,6 +889,640 @@ class BrowsingGraphVisualizer {
         if (!event.active) this.simulation.alphaTarget(0);
         d.fx = null;
         d.fy = null;
+    }
+
+    showTimelineView() {
+        // Hide the main graph elements
+        document.getElementById("graph-container").style.display = "none";
+        document.querySelector(".url-display-box").style.display = "none";
+        document.querySelector(".metrics-container").style.display = "none";
+
+        // Create timeline container if it doesn't exist
+        let timelineContainer = document.getElementById("timeline-container");
+        if (!timelineContainer) {
+            timelineContainer = document.createElement("div");
+            timelineContainer.id = "timeline-container";
+            timelineContainer.className = "timeline-container";
+            document.querySelector(".container").appendChild(timelineContainer);
+        }
+
+        timelineContainer.style.display = "block";
+        this.createTimelineView(timelineContainer);
+    }
+
+    createTimelineView(container) {
+        const hourlyData = this.generateHourlyData();
+
+        container.innerHTML = `
+            <div class="timeline-header">
+                <h2>Network Evolution - Last 24 Hours</h2>
+                <button class="btn timeline-back-btn">← Back to Graph</button>
+            </div>
+            <div class="timeline-content">
+                <div class="evolution-controls">
+                    <button class="btn evolution-play-btn" id="evolution-play">▶ Play Evolution</button>
+                    <button class="btn evolution-pause-btn" id="evolution-pause" style="display: none;">⏸ Pause</button>
+                    <button class="btn evolution-reset-btn" id="evolution-reset">⏮ Reset</button>
+                    <div class="evolution-speed">
+                        <label>Speed: </label>
+                        <select id="evolution-speed">
+                            <option value="100">0.1x</option>
+                            <option value="50">0.5x</option>
+                            <option value="20" selected>1x</option>
+                            <option value="10">2x</option>
+                            <option value="5">5x</option>
+                        </select>
+                    </div>
+                    <div class="evolution-time" id="evolution-time">Ready to play...</div>
+                </div>
+                <div class="evolution-network" id="evolution-network"></div>
+                <div class="timeline-chart" id="timeline-chart"></div>
+            </div>
+        `;
+
+        // Add back button functionality
+        container
+            .querySelector(".timeline-back-btn")
+            .addEventListener("click", () => {
+                this.hideTimelineView();
+            });
+
+        // Add evolution controls
+        this.setupEvolutionControls();
+
+        // Setup both views
+        this.setupEvolutionNetwork();
+        this.renderHourlyChart(hourlyData);
+    }
+
+    setupEvolutionControls() {
+        document
+            .getElementById("evolution-play")
+            .addEventListener("click", () => {
+                this.startEvolution();
+            });
+
+        document
+            .getElementById("evolution-pause")
+            .addEventListener("click", () => {
+                this.pauseEvolution();
+            });
+
+        document
+            .getElementById("evolution-reset")
+            .addEventListener("click", () => {
+                this.resetEvolution();
+            });
+    }
+
+    setupEvolutionNetwork() {
+        const container = d3.select("#evolution-network");
+        const width = window.innerWidth - 100;
+        const height = 500;
+
+        // Clear previous network
+        container.selectAll("*").remove();
+
+        this.evolutionSvg = container
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .style("border", "1px solid #ddd")
+            .style("border-radius", "8px")
+            .style("background", "#f8f9fa");
+
+        this.evolutionContainer = this.evolutionSvg
+            .append("g")
+            .attr("class", "evolution-container");
+
+        // Initialize evolution state
+        this.evolutionNodes = [];
+        this.evolutionLinks = [];
+        this.evolutionNodeMap = new Map();
+        this.evolutionTime = 0;
+        this.evolutionInterval = null;
+        this.evolutionSpeed = 20; // ms per step
+
+        // Create chronological sequence of browsing events
+        this.createEvolutionSequence();
+
+        // Setup force simulation for evolution
+        this.setupEvolutionSimulation(width, height);
+    }
+
+    createEvolutionSequence() {
+        this.evolutionSequence = [];
+
+        if (!this.data || !this.data.sessions) return;
+
+        // Collect all browsing events with timestamps
+        this.data.sessions.forEach((session, sessionIndex) => {
+            if (!session.domains || session.domains.length === 0) return;
+
+            const clusterId = session.tabId;
+            const clusterColor = this.getClusterColor(sessionIndex);
+
+            session.domains.forEach((domain) => {
+                (domain.urls || []).forEach((url, urlIndex) => {
+                    // Create timestamp for each URL (simulated chronological order)
+                    const timestamp =
+                        session.lastUpdate -
+                        (domain.urls.length - urlIndex) * 60000; // 1 min apart
+
+                    this.evolutionSequence.push({
+                        timestamp,
+                        type: "node",
+                        url,
+                        domain: domain.domain,
+                        clusterId,
+                        clusterColor,
+                        sessionIndex,
+                    });
+                });
+            });
+        });
+
+        // Sort by timestamp
+        this.evolutionSequence.sort((a, b) => a.timestamp - b.timestamp);
+
+        // Add link events after nodes are created
+        this.addLinkEvents();
+    }
+
+    addLinkEvents() {
+        // Group by cluster to create sequential links
+        const clusterNodes = new Map();
+
+        this.evolutionSequence.forEach((event, index) => {
+            if (event.type === "node") {
+                if (!clusterNodes.has(event.clusterId)) {
+                    clusterNodes.set(event.clusterId, []);
+                }
+                clusterNodes
+                    .get(event.clusterId)
+                    .push({ ...event, sequenceIndex: index });
+            }
+        });
+
+        // Create link events
+        clusterNodes.forEach((nodes, clusterId) => {
+            for (let i = 1; i < nodes.length; i++) {
+                const sourceEvent = nodes[i - 1];
+                const targetEvent = nodes[i];
+
+                // Insert link event right after target node
+                this.evolutionSequence.splice(
+                    targetEvent.sequenceIndex + 1,
+                    0,
+                    {
+                        timestamp: targetEvent.timestamp + 1000, // 1 second after node
+                        type: "link",
+                        source: sourceEvent,
+                        target: targetEvent,
+                        clusterId,
+                    },
+                );
+            }
+        });
+
+        // Re-sort after adding links
+        this.evolutionSequence.sort((a, b) => a.timestamp - b.timestamp);
+    }
+
+    setupEvolutionSimulation(width, height) {
+        this.evolutionSimulation = d3
+            .forceSimulation()
+            .force(
+                "link",
+                d3
+                    .forceLink()
+                    .id((d) => d.id)
+                    .distance(80)
+                    .strength(0.6),
+            )
+            .force("charge", d3.forceManyBody().strength(-300).distanceMax(150))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collision", d3.forceCollide().radius(25))
+            .on("tick", () => this.tickEvolution());
+    }
+
+    startEvolution() {
+        if (this.evolutionInterval) return;
+
+        document.getElementById("evolution-play").style.display = "none";
+        document.getElementById("evolution-pause").style.display =
+            "inline-block";
+
+        this.evolutionSpeed = parseInt(
+            document.getElementById("evolution-speed").value,
+        );
+
+        this.evolutionInterval = setInterval(() => {
+            this.stepEvolution();
+        }, this.evolutionSpeed);
+    }
+
+    pauseEvolution() {
+        if (this.evolutionInterval) {
+            clearInterval(this.evolutionInterval);
+            this.evolutionInterval = null;
+        }
+
+        document.getElementById("evolution-play").style.display =
+            "inline-block";
+        document.getElementById("evolution-pause").style.display = "none";
+    }
+
+    resetEvolution() {
+        this.pauseEvolution();
+
+        // Clear evolution state
+        this.evolutionNodes = [];
+        this.evolutionLinks = [];
+        this.evolutionNodeMap.clear();
+        this.evolutionTime = 0;
+
+        // Clear visual elements
+        this.evolutionContainer.selectAll("*").remove();
+
+        // Update display
+        document.getElementById("evolution-time").textContent =
+            "Ready to play...";
+
+        // Restart simulation
+        this.evolutionSimulation.nodes(this.evolutionNodes);
+        this.evolutionSimulation.force("link").links(this.evolutionLinks);
+    }
+
+    stepEvolution() {
+        if (this.evolutionTime >= this.evolutionSequence.length) {
+            this.pauseEvolution();
+            document.getElementById("evolution-time").textContent =
+                "Evolution complete!";
+            return;
+        }
+
+        const event = this.evolutionSequence[this.evolutionTime];
+        const eventDate = new Date(event.timestamp);
+
+        document.getElementById(
+            "evolution-time",
+        ).textContent = `${eventDate.toLocaleDateString()} ${eventDate.toLocaleTimeString()}`;
+
+        if (event.type === "node") {
+            this.addEvolutionNode(event);
+        } else if (event.type === "link") {
+            this.addEvolutionLink(event);
+        }
+
+        this.evolutionTime++;
+    }
+
+    addEvolutionNode(event) {
+        const nodeId = `${event.clusterId}-${event.url}`;
+
+        if (this.evolutionNodeMap.has(nodeId)) return;
+
+        const node = {
+            id: nodeId,
+            url: event.url,
+            domain: event.domain,
+            clusterId: event.clusterId,
+            clusterColor: event.clusterColor,
+            x: Math.random() * 400 + 100,
+            y: Math.random() * 300 + 100,
+        };
+
+        this.evolutionNodes.push(node);
+        this.evolutionNodeMap.set(nodeId, node);
+
+        // Add visual node
+        const nodeElement = this.evolutionContainer
+            .append("g")
+            .attr("class", "evolution-node")
+            .attr("transform", `translate(${node.x},${node.y})`);
+
+        nodeElement
+            .append("circle")
+            .attr("r", 0)
+            .attr("fill", node.clusterColor)
+            .attr("stroke", "#2d3436")
+            .attr("stroke-width", 2)
+            .transition()
+            .duration(500)
+            .attr("r", 8);
+
+        nodeElement
+            .append("text")
+            .text(
+                node.domain.length > 10
+                    ? node.domain.substring(0, 10) + "..."
+                    : node.domain,
+            )
+            .attr("dy", 25)
+            .attr("text-anchor", "middle")
+            .style("font-size", "10px")
+            .style("fill", "#2d3436")
+            .style("opacity", 0)
+            .transition()
+            .delay(300)
+            .duration(300)
+            .style("opacity", 1);
+
+        // Update simulation
+        this.evolutionSimulation.nodes(this.evolutionNodes);
+        this.evolutionSimulation.alpha(0.3).restart();
+    }
+
+    addEvolutionLink(event) {
+        const sourceId = `${event.source.clusterId}-${event.source.url}`;
+        const targetId = `${event.target.clusterId}-${event.target.url}`;
+
+        const sourceNode = this.evolutionNodeMap.get(sourceId);
+        const targetNode = this.evolutionNodeMap.get(targetId);
+
+        if (!sourceNode || !targetNode) return;
+
+        const link = {
+            source: sourceNode,
+            target: targetNode,
+            type: "evolution-link",
+        };
+
+        this.evolutionLinks.push(link);
+
+        // Add visual link
+        this.evolutionContainer
+            .insert("line", ".evolution-node")
+            .attr("class", "evolution-link")
+            .attr("x1", sourceNode.x)
+            .attr("y1", sourceNode.y)
+            .attr("x2", sourceNode.x)
+            .attr("y2", sourceNode.y)
+            .attr("stroke", "#4285f4")
+            .attr("stroke-width", 2)
+            .attr("opacity", 0)
+            .transition()
+            .duration(800)
+            .attr("x2", targetNode.x)
+            .attr("y2", targetNode.y)
+            .attr("opacity", 0.6);
+
+        // Update simulation
+        this.evolutionSimulation.force("link").links(this.evolutionLinks);
+        this.evolutionSimulation.alpha(0.3).restart();
+    }
+
+    tickEvolution() {
+        // Update node positions
+        this.evolutionContainer
+            .selectAll(".evolution-node")
+            .attr("transform", (d) => `translate(${d.x},${d.y})`);
+
+        // Update link positions
+        this.evolutionContainer
+            .selectAll(".evolution-link")
+            .attr("x1", (d) => d.source.x)
+            .attr("y1", (d) => d.source.y)
+            .attr("x2", (d) => d.target.x)
+            .attr("y2", (d) => d.target.y);
+    }
+
+    generateHourlyData() {
+        const now = Date.now();
+        const hourlyData = [];
+
+        // Generate data for last 24 hours
+        for (let i = 23; i >= 0; i--) {
+            const hourStart = now - i * 60 * 60 * 1000;
+            const hourEnd = hourStart + 60 * 60 * 1000;
+
+            let urlCount = 0;
+            let tabCount = 0;
+            const domains = new Set();
+
+            if (this.data && this.data.sessions) {
+                this.data.sessions.forEach((session) => {
+                    if (
+                        session.lastUpdate >= hourStart &&
+                        session.lastUpdate < hourEnd
+                    ) {
+                        tabCount++;
+                        session.domains.forEach((domain) => {
+                            domains.add(domain.domain);
+                            urlCount += domain.urls ? domain.urls.length : 0;
+                        });
+                    }
+                });
+            }
+
+            const date = new Date(hourStart);
+            hourlyData.push({
+                hour: hourStart,
+                timeLabel: date.toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                }),
+                urlCount,
+                tabCount,
+                domainCount: domains.size,
+            });
+        }
+
+        return hourlyData;
+    }
+
+    renderHourlyChart(data) {
+        const chartContainer = document.getElementById("timeline-chart");
+        const margin = { top: 40, right: 40, bottom: 60, left: 60 };
+        const width = window.innerWidth - margin.left - margin.right - 100;
+        const height = 400 - margin.top - margin.bottom;
+
+        // Clear previous chart
+        chartContainer.innerHTML = "";
+
+        const svg = d3
+            .select("#timeline-chart")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom);
+
+        const g = svg
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Scales
+        const xScale = d3
+            .scaleLinear()
+            .domain([0, data.length - 1])
+            .range([0, width]);
+
+        const yScale = d3
+            .scaleLinear()
+            .domain([
+                0,
+                d3.max(data, (d) =>
+                    Math.max(d.urlCount, d.tabCount, d.domainCount),
+                ),
+            ])
+            .range([height, 0]);
+
+        // Lines
+        const urlLine = d3
+            .line()
+            .x((d, i) => xScale(i))
+            .y((d) => yScale(d.urlCount))
+            .curve(d3.curveMonotoneX);
+
+        const tabLine = d3
+            .line()
+            .x((d, i) => xScale(i))
+            .y((d) => yScale(d.tabCount))
+            .curve(d3.curveMonotoneX);
+
+        const domainLine = d3
+            .line()
+            .x((d, i) => xScale(i))
+            .y((d) => yScale(d.domainCount))
+            .curve(d3.curveMonotoneX);
+
+        // Add axes
+        g.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(
+                d3
+                    .axisBottom(xScale)
+                    .tickFormat((d, i) => (data[d] ? data[d].timeLabel : "")),
+            );
+
+        g.append("g").call(d3.axisLeft(yScale));
+
+        // Add lines
+        g.append("path")
+            .datum(data)
+            .attr("class", "line url-line")
+            .attr("d", urlLine)
+            .style("fill", "none")
+            .style("stroke", "#4285f4")
+            .style("stroke-width", 3);
+
+        g.append("path")
+            .datum(data)
+            .attr("class", "line tab-line")
+            .attr("d", tabLine)
+            .style("fill", "none")
+            .style("stroke", "#ff6b6b")
+            .style("stroke-width", 3);
+
+        g.append("path")
+            .datum(data)
+            .attr("class", "line domain-line")
+            .attr("d", domainLine)
+            .style("fill", "none")
+            .style("stroke", "#4ecdc4")
+            .style("stroke-width", 3);
+
+        // Add dots for data points
+        g.selectAll(".url-dot")
+            .data(data)
+            .enter()
+            .append("circle")
+            .attr("class", "url-dot")
+            .attr("cx", (d, i) => xScale(i))
+            .attr("cy", (d) => yScale(d.urlCount))
+            .attr("r", 4)
+            .style("fill", "#4285f4");
+
+        g.selectAll(".tab-dot")
+            .data(data)
+            .enter()
+            .append("circle")
+            .attr("class", "tab-dot")
+            .attr("cx", (d, i) => xScale(i))
+            .attr("cy", (d) => yScale(d.tabCount))
+            .attr("r", 4)
+            .style("fill", "#ff6b6b");
+
+        g.selectAll(".domain-dot")
+            .data(data)
+            .enter()
+            .append("circle")
+            .attr("class", "domain-dot")
+            .attr("cx", (d, i) => xScale(i))
+            .attr("cy", (d) => yScale(d.domainCount))
+            .attr("r", 4)
+            .style("fill", "#4ecdc4");
+
+        // Add legend
+        const legend = svg
+            .append("g")
+            .attr("class", "legend")
+            .attr("transform", `translate(${width - 150}, 20)`);
+
+        const legendData = [
+            { label: "URLs", color: "#4285f4" },
+            { label: "Tabs", color: "#ff6b6b" },
+            { label: "Domains", color: "#4ecdc4" },
+        ];
+
+        legend
+            .selectAll(".legend-item")
+            .data(legendData)
+            .enter()
+            .append("g")
+            .attr("class", "legend-item")
+            .attr("transform", (d, i) => `translate(0, ${i * 25})`)
+            .each(function (d) {
+                d3.select(this)
+                    .append("line")
+                    .attr("x1", 0)
+                    .attr("x2", 20)
+                    .style("stroke", d.color)
+                    .style("stroke-width", 3);
+
+                d3.select(this)
+                    .append("text")
+                    .attr("x", 25)
+                    .attr("y", 5)
+                    .text(d.label)
+                    .style("font-size", "14px")
+                    .style("fill", "#2d3436");
+            });
+
+        // Add labels
+        g.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", 0 - margin.left)
+            .attr("x", 0 - height / 2)
+            .attr("dy", "1em")
+            .style("text-anchor", "middle")
+            .style("font-size", "14px")
+            .style("fill", "#2d3436")
+            .text("Count");
+
+        g.append("text")
+            .attr(
+                "transform",
+                `translate(${width / 2}, ${height + margin.bottom - 10})`,
+            )
+            .style("text-anchor", "middle")
+            .style("font-size", "14px")
+            .style("fill", "#2d3436")
+            .text("Time (24-hour format)");
+    }
+
+    hideTimelineView() {
+        // Show the main graph elements
+        document.getElementById("graph-container").style.display = "block";
+        document.querySelector(".url-display-box").style.display = "block";
+        document.querySelector(".metrics-container").style.display = "flex";
+
+        // Hide timeline container
+        const timelineContainer = document.getElementById("timeline-container");
+        if (timelineContainer) {
+            timelineContainer.style.display = "none";
+        }
     }
 }
 

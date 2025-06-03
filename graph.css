@@ -426,3 +426,201 @@ body {
         justify-content: center;
     }
 }
+
+/* Timeline View Styles */
+.timeline-container {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    background: #f8f9fa;
+    overflow-y: auto;
+    z-index: 500;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 30px;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.timeline-header h2 {
+    font-family: "Nunito", sans-serif;
+    font-weight: 800;
+    font-size: 32px;
+    color: #2d3436;
+    margin: 0;
+}
+
+.timeline-back-btn {
+    padding: 12px 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+    color: #2d3436;
+}
+
+.timeline-back-btn:hover {
+    background: #4285f4;
+    border-color: #4285f4;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.timeline-content {
+    padding: 40px;
+}
+
+.timeline-chart {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
+}
+
+.timeline-chart svg {
+    display: block;
+    margin: 0 auto;
+}
+
+/* Timeline chart elements */
+.line {
+    transition: stroke-width 0.2s ease;
+}
+
+.line:hover {
+    stroke-width: 5 !important;
+}
+
+circle.url-dot:hover,
+circle.tab-dot:hover,
+circle.domain-dot:hover {
+    r: 6;
+    cursor: pointer;
+}
+
+.legend-item text {
+    font-family: "Nunito", sans-serif;
+    font-weight: 600;
+}
+
+/* Evolution Controls */
+.evolution-controls {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.evolution-play-btn,
+.evolution-pause-btn,
+.evolution-reset-btn {
+    padding: 10px 16px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: white;
+    color: #2d3436;
+}
+
+.evolution-play-btn:hover,
+.evolution-pause-btn:hover {
+    background: #4285f4;
+    border-color: #4285f4;
+    color: white;
+    transform: translateY(-1px);
+}
+
+.evolution-reset-btn:hover {
+    background: #ff6b6b;
+    border-color: #ff6b6b;
+    color: white;
+    transform: translateY(-1px);
+}
+
+.evolution-speed {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.evolution-speed label {
+    font-weight: 600;
+    color: #2d3436;
+}
+
+.evolution-speed select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.evolution-time {
+    margin-left: auto;
+    font-weight: 600;
+    color: #4285f4;
+    font-size: 14px;
+    background: #f8f9fa;
+    padding: 8px 16px;
+    border-radius: 20px;
+}
+
+/* Evolution Network */
+.evolution-network {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.evolution-network svg {
+    border: 2px solid #f0f0f0;
+    border-radius: 8px;
+}
+
+/* Evolution animations */
+.evolution-node {
+    cursor: pointer;
+}
+
+.evolution-node circle {
+    transition: all 0.3s ease;
+}
+
+.evolution-node:hover circle {
+    r: 12;
+    stroke-width: 3;
+}
+
+.evolution-link {
+    transition: all 0.3s ease;
+}
+
+.evolution-link:hover {
+    stroke-width: 4 !important;
+    opacity: 1 !important;
+}
