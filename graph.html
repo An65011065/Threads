@@ -3,75 +3,69 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Browsing Graph Visualizer</title>
+        <title>LINKx - Browsing Graph Visualizer</title>
         <link rel="stylesheet" href="graph.css" />
         <script src="extensions/d3.min.js"></script>
     </head>
     <body>
-        <div class="container minimal">
-            <header class="header minimal-header">
-                <h1>Browsing Graph</h1>
-                <div class="controls">
-                    <button id="refreshBtn" class="btn primary">
-                        🔄 Refresh
-                    </button>
-                    <button id="exportBtn" class="btn secondary">
-                        💾 Export
-                    </button>
-                </div>
-            </header>
+        <div class="container">
+            <!-- Top Left Branding -->
+            <div class="branding">
+                <h1 class="brand-title">LINKx</h1>
+                <div class="url-count" id="urlCount">0</div>
+            </div>
 
-            <main class="main-content">
-                <section class="stats-bar minimal-stats">
-                    <div class="stat">
-                        <span class="stat-label">Tabs</span>
-                        <span id="tabCount" class="stat-value">0</span>
+            <!-- URL Display Box -->
+            <div class="url-display-box" id="urlDisplayBox">
+                <div class="url-display-header">url display box</div>
+                <div class="url-display-content">
+                    <div class="cluster-info" id="clusterInfo">
+                        tab cluster: -
                     </div>
-                    <div class="stat">
-                        <span class="stat-label">Connections</span>
-                        <span id="edgeCount" class="stat-value">0</span>
+                    <div class="url-info" id="urlInfo">
+                        Hover over a node to see details
                     </div>
-                    <div class="stat">
-                        <span class="stat-label">Websites</span>
-                        <span id="visitCount" class="stat-value">0</span>
-                    </div>
-                </section>
+                </div>
+            </div>
 
-                <div id="graph-container" class="notion-graph">
-                    <svg id="graph"></svg>
-                    <div id="tooltip" class="tooltip"></div>
-                    <div id="loading" class="loading">
-                        <div class="spinner"></div>
-                        <p>Loading browsing data...</p>
-                    </div>
+            <!-- Main Graph Container -->
+            <div id="graph-container">
+                <svg id="graph"></svg>
+                <div id="tooltip" class="tooltip"></div>
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading browsing data...</p>
                 </div>
-            </main>
+            </div>
 
-            <aside class="sidebar minimal-sidebar">
-                <div class="sidebar-card">
-                    <h3>Selected Node</h3>
-                    <div id="nodeInfo" class="node-info">
-                        <p>Click on a website to see details</p>
-                    </div>
+            <!-- Bottom Metrics -->
+            <div class="metrics-container">
+                <div class="metric-item">
+                    <div class="metric-label">dwell time distribution</div>
+                    <div class="metric-value" id="dwellTime">0.0s</div>
                 </div>
-                <div class="sidebar-card">
-                    <h3>Filters</h3>
-                    <div class="filters">
-                        <label>
-                            <input type="checkbox" id="showInactive" checked />
-                            Show closed tabs
-                        </label>
-                        <label>
-                            <input type="checkbox" id="showLabels" checked />
-                            Show labels
-                        </label>
-                        <label>
-                            <input type="checkbox" id="expandedMode" checked />
-                            Expanded mode
-                        </label>
-                    </div>
+
+                <div class="metric-item">
+                    <div class="metric-label">page entropy</div>
+                    <div class="metric-value" id="pageEntropy">0.00</div>
                 </div>
-            </aside>
+
+                <div class="metric-item">
+                    <div class="metric-label">return velocity</div>
+                    <div class="metric-value" id="returnVelocity">0.0%</div>
+                </div>
+
+                <div class="link-evolution">
+                    <span class="evolution-text">link evolution</span>
+                    <span class="evolution-arrow">▶</span>
+                </div>
+            </div>
+
+            <!-- Hidden Controls -->
+            <div class="controls hidden">
+                <button id="refreshBtn" class="btn primary">🔄 Refresh</button>
+                <button id="exportBtn" class="btn secondary">💾 Export</button>
+            </div>
         </div>
         <script src="graph.js"></script>
     </body>
