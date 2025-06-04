@@ -19,11 +19,11 @@
             <div class="url-display-box" id="urlDisplayBox">
                 <div class="url-display-content">
                     <div class="cluster-info" id="clusterInfo">
-                        tab cluster:
+                        <div style="color: white">
+                            Tab cluster: Hover over a node to see details
+                        </div>
                     </div>
-                    <div class="url-info" id="urlInfo">
-                        Hover over a node to see details
-                    </div>
+                    <div class="url-info" id="urlInfo"></div>
                 </div>
             </div>
 
@@ -39,6 +39,7 @@
 
             <!-- Bottom Metrics -->
             <div class="metrics-container">
+                <!-- Row 1: Original Metrics -->
                 <div class="metric-item">
                     <div class="metric-label">dwell time distribution</div>
                     <div class="metric-value" id="dwellTime">0.0s</div>
@@ -54,9 +55,40 @@
                     <div class="metric-value" id="returnVelocity">0.0%</div>
                 </div>
 
-                <div class="link-evolution">
-                    <span class="evolution-text">link evolution</span>
-                    <span class="evolution-arrow">▶</span>
+                <!-- Row 2: Network Structure Metrics -->
+                <div class="metric-item">
+                    <div class="metric-label">network density</div>
+                    <div class="metric-value" id="networkDensity">0.0%</div>
+                </div>
+
+                <div class="metric-item">
+                    <div class="metric-label">session focus</div>
+                    <div class="metric-value" id="sessionFocus">0.0%</div>
+                </div>
+
+                <div class="metric-item">
+                    <div class="metric-label">domain diversity</div>
+                    <div class="metric-value" id="domainDiversity">0</div>
+                </div>
+
+                <!-- Row 3: Navigation & Clustering Metrics -->
+                <div class="metric-item">
+                    <div class="metric-label">navigation efficiency</div>
+                    <div class="metric-value" id="navigationEfficiency">
+                        0.0%
+                    </div>
+                </div>
+
+                <div class="metric-item">
+                    <div class="metric-label">clustering coefficient</div>
+                    <div class="metric-value" id="clusteringCoefficient">
+                        0.0%
+                    </div>
+                </div>
+
+                <div class="metric-item">
+                    <div class="metric-label">avg path length</div>
+                    <div class="metric-value" id="averagePathLength">0.0</div>
                 </div>
             </div>
 

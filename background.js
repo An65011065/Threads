@@ -74,6 +74,7 @@ class TabAwareBrowsingTracker {
                     created: Date.now(),
                     domains: new Map(), // domain -> {visitCount, firstVisit, lastVisit, urls: []}
                     navigationOrder: [], // sequence of domains visited
+                    urlSequence: [], // CHRONOLOGICAL sequence of all URLs visited (the fix!)
                     lastUpdate: Date.now(),
                 });
             } catch (error) {
@@ -165,6 +166,7 @@ class TabAwareBrowsingTracker {
                     created: Date.now(),
                     domains: new Map(),
                     navigationOrder: [],
+                    urlSequence: [], // Initialize chronological URL sequence
                     lastUpdate: Date.now(),
                 };
                 this.data.sessions.set(tabId, session);
@@ -173,6 +175,7 @@ class TabAwareBrowsingTracker {
             // Ensure session has all required properties
             if (!session.domains) session.domains = new Map();
             if (!session.navigationOrder) session.navigationOrder = [];
+            if (!session.urlSequence) session.urlSequence = []; // Ensure urlSequence exists
 
             const domain = new URL(url).hostname;
             const now = Date.now();
@@ -182,6 +185,18 @@ class TabAwareBrowsingTracker {
                 tabId,
                 "to:",
                 domain,
+            );
+
+            // **THE KEY FIX**: Add URL to chronological sequence immediately
+            session.urlSequence.push({
+                url: url,
+                domain: domain,
+                timestamp: now,
+                sequenceIndex: session.urlSequence.length,
+            });
+
+            console.log(
+                `📍 Added to sequence #${session.urlSequence.length}: ${url}`,
             );
 
             // Get or create domain data for this session
@@ -227,7 +242,7 @@ class TabAwareBrowsingTracker {
             domainData.visitCount++;
             domainData.lastVisit = now;
 
-            // Store unique URLs
+            // Store unique URLs (keep this for backward compatibility)
             if (!domainData.urls.includes(url)) {
                 domainData.urls.push(url);
             }
@@ -239,6 +254,7 @@ class TabAwareBrowsingTracker {
                 visitCount: domainData.visitCount,
                 tabId,
                 sessionId: session.sessionId,
+                totalUrlsInSequence: session.urlSequence.length,
             });
 
             this.scheduleSave();
@@ -446,6 +462,7 @@ class TabAwareBrowsingTracker {
                     created: now,
                     domains: new Map(),
                     navigationOrder: [],
+                    urlSequence: [], // Initialize chronological URL sequence
                     lastUpdate: now,
                 };
 
@@ -457,6 +474,12 @@ class TabAwareBrowsingTracker {
                         urls: [`https://${domainInfo.domain}`],
                     });
                     session.navigationOrder.push(domainInfo.domain);
+                    session.urlSequence.push({
+                        url: `https://${domainInfo.domain}`,
+                        domain: domainInfo.domain,
+                        timestamp: now + index * 1000,
+                        sequenceIndex: index + 1,
+                    });
                 });
 
                 this.data.sessions.set(testSession.tabId, session);
