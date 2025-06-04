@@ -3,7 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>LINKx - Browsing Graph Visualizer</title>
+        <title>LINKx</title>
         <link rel="stylesheet" href="graph.css" />
         <script src="extensions/d3.min.js"></script>
     </head>
@@ -19,8 +19,8 @@
             <div class="url-display-box" id="urlDisplayBox">
                 <div class="url-display-content">
                     <div class="cluster-info" id="clusterInfo">
-                        <div style="color: white">
-                            Tab cluster: Hover over a node to see details
+                        <div style="color: white; font-weight: 600">
+                            Tab cluster - Hover over a node to see details
                         </div>
                     </div>
                     <div class="url-info" id="urlInfo"></div>
@@ -55,12 +55,22 @@
                     <div class="metric-value" id="returnVelocity">0.0%</div>
                 </div>
 
-                <!-- Row 2: Network Structure Metrics -->
+                <!-- Vertical Separator -->
+                <div class="metrics-separator"></div>
+
+                <!-- Total Session Time -->
                 <div class="metric-item">
-                    <div class="metric-label">network density</div>
-                    <div class="metric-value" id="networkDensity">0.0%</div>
+                    <div class="metric-label">total session time</div>
+                    <div class="metric-value" id="totalSessionTime">0.0s</div>
                 </div>
 
+                <!-- Row 2: Network Structure Metrics -->
+                <div class="metric-item">
+                    <div class="metric-label">social time</div>
+                    <div class="metric-value" id="socialTime">0.0s</div>
+                </div>
+
+                <!-- Row 3: Navigation & Clustering Metrics -->
                 <div class="metric-item">
                     <div class="metric-label">session focus</div>
                     <div class="metric-value" id="sessionFocus">0.0%</div>
@@ -71,7 +81,7 @@
                     <div class="metric-value" id="domainDiversity">0</div>
                 </div>
 
-                <!-- Row 3: Navigation & Clustering Metrics -->
+                <!-- Row 4: Navigation & Clustering Metrics -->
                 <div class="metric-item">
                     <div class="metric-label">navigation efficiency</div>
                     <div class="metric-value" id="navigationEfficiency">
@@ -85,19 +95,14 @@
                         0.0%
                     </div>
                 </div>
-
-                <div class="metric-item">
-                    <div class="metric-label">avg path length</div>
-                    <div class="metric-value" id="averagePathLength">0.0</div>
-                </div>
             </div>
 
-            <!-- Hidden Controls -->
-            <div class="controls hidden">
-                <button id="refreshBtn" class="btn primary">🔄 Refresh</button>
-                <button id="exportBtn" class="btn secondary">💾 Export</button>
+            <!-- Controls -->
+            <div class="controls">
+                <button id="exportBtn" class="btn secondary">.svg</button>
             </div>
         </div>
+        <!-- Remove or comment out the next line to disable test data in production -->
         <script src="graph.js"></script>
     </body>
 </html>

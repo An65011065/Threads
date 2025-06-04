@@ -11,6 +11,10 @@ class TabAwareBrowsingTracker {
             tabRelationships: [], // parent-child relationships between tabs
         };
 
+        // Track active pages for time calculation
+        this.activePages = new Map(); // tabId -> {url, startTime, domain}
+        this.focusedTabId = null; // Currently focused tab
+
         this.saveTimeout = null;
         this.init();
     }
@@ -60,10 +64,23 @@ class TabAwareBrowsingTracker {
                         "opened from tab",
                         tab.openerTabId,
                     );
-                    this.data.tabRelationships.push({
-                        parentTabId: tab.openerTabId,
-                        childTabId: tab.id,
-                        timestamp: Date.now(),
+
+                    // Get the current URL from the opener tab
+                    this.getOpenerTabUrl(tab.openerTabId).then((openerUrl) => {
+                        const relationship = {
+                            parentTabId: tab.openerTabId,
+                            childTabId: tab.id,
+                            timestamp: Date.now(),
+                            openerUrl: openerUrl, // URL that triggered the new tab
+                            targetUrl: null, // Will be filled when child tab loads
+                        };
+
+                        this.data.tabRelationships.push(relationship);
+                        console.log(
+                            "🔗 Inter-tab relationship tracked:",
+                            relationship,
+                        );
+                        this.scheduleSave();
                     });
                 }
 
@@ -72,9 +89,7 @@ class TabAwareBrowsingTracker {
                     tabId: tab.id,
                     parentTabId: tab.openerTabId || null,
                     created: Date.now(),
-                    domains: new Map(), // domain -> {visitCount, firstVisit, lastVisit, urls: []}
-                    navigationOrder: [], // sequence of domains visited
-                    urlSequence: [], // CHRONOLOGICAL sequence of all URLs visited (the fix!)
+                    urlSequence: [], // Only track URL sequence
                     lastUpdate: Date.now(),
                 });
             } catch (error) {
@@ -93,6 +108,9 @@ class TabAwareBrowsingTracker {
                 ) {
                     console.log("📄 Page loaded in tab", tabId, ":", tab.url);
                     this.handleNavigation(tabId, tab.url);
+
+                    // Update any pending inter-tab relationships with the target URL
+                    this.updatePendingTabRelationships(tabId, tab.url);
                 }
             } catch (error) {
                 console.error("❌ Error in onUpdated:", error);
@@ -103,9 +121,24 @@ class TabAwareBrowsingTracker {
         chrome.tabs.onActivated.addListener((activeInfo) => {
             try {
                 console.log("🔄 Tab activated:", activeInfo.tabId);
-                this.updateSessionActivity(activeInfo.tabId);
+                this.handleTabActivation(activeInfo.tabId);
             } catch (error) {
                 console.error("❌ Error in onActivated:", error);
+            }
+        });
+
+        // Track window focus changes
+        chrome.windows.onFocusChanged.addListener((windowId) => {
+            try {
+                if (windowId === chrome.windows.WINDOW_ID_NONE) {
+                    console.log("🔍 Browser lost focus");
+                    this.handleBrowserFocusChange(false);
+                } else {
+                    console.log("🔍 Browser gained focus");
+                    this.handleBrowserFocusChange(true);
+                }
+            } catch (error) {
+                console.error("❌ Error in onFocusChanged:", error);
             }
         });
 
@@ -113,6 +146,10 @@ class TabAwareBrowsingTracker {
         chrome.tabs.onRemoved.addListener((tabId) => {
             try {
                 console.log("❌ Tab closed:", tabId);
+
+                // Finalize time tracking for this tab
+                this.finalizePreviousPageTime(tabId);
+
                 if (this.data.sessions.has(tabId)) {
                     const session = this.data.sessions.get(tabId);
                     session.closed = Date.now();
@@ -121,6 +158,12 @@ class TabAwareBrowsingTracker {
                         this.data.sessions.delete(tabId);
                         this.scheduleSave();
                     }, 5 * 60 * 1000); // Keep for 5 minutes
+                }
+
+                // Clean up tracking data
+                this.activePages.delete(tabId);
+                if (this.focusedTabId === tabId) {
+                    this.focusedTabId = null;
                 }
             } catch (error) {
                 console.error("❌ Error in onRemoved:", error);
@@ -132,6 +175,45 @@ class TabAwareBrowsingTracker {
 
     generateSessionId() {
         return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    }
+
+    async getOpenerTabUrl(openerTabId) {
+        try {
+            // Get the current URL of the opener tab
+            const openerTab = await chrome.tabs.get(openerTabId);
+            return openerTab.url || null;
+        } catch (error) {
+            console.warn("❌ Could not get opener tab URL:", error);
+            return null;
+        }
+    }
+
+    updatePendingTabRelationships(tabId, url) {
+        try {
+            // Find any pending relationships where this tab is the child
+            const pendingRelationships = this.data.tabRelationships.filter(
+                (rel) => rel.childTabId === tabId && rel.targetUrl === null,
+            );
+
+            pendingRelationships.forEach((rel) => {
+                rel.targetUrl = url;
+                console.log("🎯 Inter-tab relationship completed:", {
+                    from: rel.openerUrl,
+                    to: rel.targetUrl,
+                    parentTab: rel.parentTabId,
+                    childTab: rel.childTabId,
+                });
+            });
+
+            if (pendingRelationships.length > 0) {
+                this.scheduleSave();
+            }
+        } catch (error) {
+            console.error(
+                "❌ Error updating pending tab relationships:",
+                error,
+            );
+        }
     }
 
     updateSessionActivity(tabId) {
@@ -150,6 +232,9 @@ class TabAwareBrowsingTracker {
             // Ensure we have valid data
             this.ensureValidData();
 
+            // Calculate dwell time for the previous page in this tab
+            this.finalizePreviousPageTime(tabId);
+
             // Get or create session for this tab
             let session = this.data.sessions.get(tabId);
             if (!session) {
@@ -162,104 +247,184 @@ class TabAwareBrowsingTracker {
                 session = {
                     sessionId: sessionId,
                     tabId: tabId,
-                    parentTabId: null, // We don't have opener info for existing tabs
+                    parentTabId: null,
                     created: Date.now(),
-                    domains: new Map(),
-                    navigationOrder: [],
-                    urlSequence: [], // Initialize chronological URL sequence
+                    urlSequence: [], // Track URL sequence with actual dwell times
                     lastUpdate: Date.now(),
                 };
                 this.data.sessions.set(tabId, session);
             }
 
-            // Ensure session has all required properties
-            if (!session.domains) session.domains = new Map();
-            if (!session.navigationOrder) session.navigationOrder = [];
-            if (!session.urlSequence) session.urlSequence = []; // Ensure urlSequence exists
+            // Ensure session has urlSequence
+            if (!session.urlSequence) session.urlSequence = [];
 
             const domain = new URL(url).hostname;
             const now = Date.now();
 
-            console.log(
-                "🔍 Processing navigation in tab",
-                tabId,
-                "to:",
-                domain,
-            );
+            console.log("🔍 Processing navigation in tab", tabId, "to:", url);
 
-            // **THE KEY FIX**: Add URL to chronological sequence immediately
-            session.urlSequence.push({
+            // Add URL to chronological sequence with start time
+            const urlVisit = {
                 url: url,
                 domain: domain,
                 timestamp: now,
+                startTime: now,
+                endTime: null, // Will be set when navigating away
+                dwellTime: null, // Will be calculated when endTime is set
                 sequenceIndex: session.urlSequence.length,
-            });
+                wasActive: tabId === this.focusedTabId, // Track if tab was active when navigation started
+            };
 
-            console.log(
-                `📍 Added to sequence #${session.urlSequence.length}: ${url}`,
-            );
-
-            // Get or create domain data for this session
-            let domainData = session.domains.get(domain);
-            if (!domainData) {
-                domainData = {
-                    visitCount: 0,
-                    firstVisit: now,
-                    lastVisit: now,
-                    urls: [],
-                };
-                session.domains.set(domain, domainData);
-
-                // Add to navigation order only on first visit
-                session.navigationOrder.push(domain);
-                console.log("🆕 First visit to", domain, "in tab", tabId);
-
-                // Create edge from previous domain if exists
-                if (session.navigationOrder.length > 1) {
-                    const prevDomain =
-                        session.navigationOrder[
-                            session.navigationOrder.length - 2
-                        ];
-                    const edge = {
-                        from: prevDomain,
-                        to: domain,
-                        sessionId: session.sessionId,
-                        tabId: tabId,
-                        timestamp: now,
-                    };
-
-                    // Ensure edges array exists
-                    if (!this.data.edges) {
-                        this.data.edges = [];
-                    }
-
-                    this.data.edges.push(edge);
-                    console.log("🔗 Created edge:", prevDomain, "->", domain);
-                }
-            }
-
-            // Increment visit count and update data
-            domainData.visitCount++;
-            domainData.lastVisit = now;
-
-            // Store unique URLs (keep this for backward compatibility)
-            if (!domainData.urls.includes(url)) {
-                domainData.urls.push(url);
-            }
-
+            session.urlSequence.push(urlVisit);
             session.lastUpdate = now;
 
-            console.log("📊 Updated domain data:", {
+            // Track this page as active for time calculation
+            this.activePages.set(tabId, {
+                url: url,
+                domain: domain,
+                startTime: now,
+                urlVisitIndex: session.urlSequence.length - 1, // Reference to the visit in urlSequence
+            });
+
+            console.log("📊 Navigation tracked with timing:", {
                 domain,
-                visitCount: domainData.visitCount,
                 tabId,
                 sessionId: session.sessionId,
                 totalUrlsInSequence: session.urlSequence.length,
+                url: url,
+                startTime: now,
             });
 
             this.scheduleSave();
         } catch (error) {
             console.error("❌ Error handling navigation:", error);
+        }
+    }
+
+    finalizePreviousPageTime(tabId) {
+        try {
+            const activePage = this.activePages.get(tabId);
+            if (!activePage) return;
+
+            const session = this.data.sessions.get(tabId);
+            if (
+                !session ||
+                !session.urlSequence ||
+                session.urlSequence.length === 0
+            )
+                return;
+
+            // Find the corresponding URL visit in the session
+            const urlVisit = session.urlSequence[activePage.urlVisitIndex];
+            if (!urlVisit || urlVisit.endTime !== null) return; // Already finalized
+
+            const now = Date.now();
+            const dwellTime = (now - activePage.startTime) / 1000; // Convert to seconds
+
+            // Update the URL visit with end time and calculated dwell time
+            urlVisit.endTime = now;
+            urlVisit.dwellTime = Math.max(0.1, dwellTime); // Minimum 0.1 seconds
+
+            console.log(
+                `⏱️ Finalized page time: ${dwellTime.toFixed(1)}s on ${
+                    activePage.url
+                }`,
+            );
+
+            // Remove from active tracking
+            this.activePages.delete(tabId);
+        } catch (error) {
+            console.error("❌ Error finalizing page time:", error);
+        }
+    }
+
+    handleTabActivation(tabId) {
+        try {
+            const previousFocusedTab = this.focusedTabId;
+            this.focusedTabId = tabId;
+
+            // Pause time tracking for previously focused tab
+            if (previousFocusedTab && previousFocusedTab !== tabId) {
+                this.pauseTimeTracking(previousFocusedTab);
+            }
+
+            // Resume time tracking for newly focused tab
+            this.resumeTimeTracking(tabId);
+
+            this.updateSessionActivity(tabId);
+        } catch (error) {
+            console.error("❌ Error handling tab activation:", error);
+        }
+    }
+
+    handleBrowserFocusChange(hasFocus) {
+        try {
+            if (!hasFocus) {
+                // Browser lost focus - pause all time tracking
+                console.log("⏸️ Pausing time tracking (browser unfocused)");
+                for (const tabId of this.activePages.keys()) {
+                    this.pauseTimeTracking(tabId);
+                }
+            } else {
+                // Browser gained focus - resume tracking for focused tab
+                console.log("▶️ Resuming time tracking (browser focused)");
+                if (this.focusedTabId) {
+                    this.resumeTimeTracking(this.focusedTabId);
+                }
+            }
+        } catch (error) {
+            console.error("❌ Error handling browser focus change:", error);
+        }
+    }
+
+    pauseTimeTracking(tabId) {
+        try {
+            const activePage = this.activePages.get(tabId);
+            if (!activePage || activePage.pausedAt) return;
+
+            const now = Date.now();
+            const session = this.data.sessions.get(tabId);
+
+            if (
+                session &&
+                session.urlSequence &&
+                session.urlSequence[activePage.urlVisitIndex]
+            ) {
+                const urlVisit = session.urlSequence[activePage.urlVisitIndex];
+
+                // Add accumulated time to any existing dwell time
+                const sessionTime = (now - activePage.startTime) / 1000;
+                urlVisit.dwellTime =
+                    (urlVisit.dwellTime || 0) + Math.max(0, sessionTime);
+
+                // Mark as paused
+                activePage.pausedAt = now;
+
+                console.log(
+                    `⏸️ Paused tracking for tab ${tabId}, accumulated ${sessionTime.toFixed(
+                        1,
+                    )}s`,
+                );
+            }
+        } catch (error) {
+            console.error("❌ Error pausing time tracking:", error);
+        }
+    }
+
+    resumeTimeTracking(tabId) {
+        try {
+            const activePage = this.activePages.get(tabId);
+            if (!activePage) return;
+
+            const now = Date.now();
+
+            // Reset start time for resumed tracking
+            activePage.startTime = now;
+            delete activePage.pausedAt;
+
+            console.log(`▶️ Resumed tracking for tab ${tabId}`);
+        } catch (error) {
+            console.error("❌ Error resuming time tracking:", error);
         }
     }
 
@@ -278,7 +443,7 @@ class TabAwareBrowsingTracker {
                     tabId,
                     {
                         ...session,
-                        domains: Array.from(session.domains.entries()),
+                        urlSequence: session.urlSequence || [],
                     },
                 ],
             );
@@ -313,8 +478,7 @@ class TabAwareBrowsingTracker {
                             tabId,
                             {
                                 ...session,
-                                domains: new Map(session.domains || []),
-                                navigationOrder: session.navigationOrder || [],
+                                urlSequence: session.urlSequence || [],
                             },
                         ]),
                     );
@@ -361,30 +525,10 @@ class TabAwareBrowsingTracker {
                     !session.closed &&
                     now - session.lastUpdate < 30 * 60 * 1000; // Active if updated in last 30 min
 
-                const domains = [];
-                let totalVisits = 0;
-
-                // Convert domains map to array with visit counts
-                if (session.domains) {
-                    for (const [domainName, domainData] of session.domains) {
-                        domains.push({
-                            domain: domainName,
-                            visitCount: domainData.visitCount || 0,
-                            firstVisit: domainData.firstVisit || now,
-                            lastVisit: domainData.lastVisit || now,
-                            urls: domainData.urls || [],
-                        });
-                        totalVisits += domainData.visitCount || 0;
-                    }
+                // Only include sessions that have URLs
+                if (!session.urlSequence || session.urlSequence.length === 0) {
+                    continue;
                 }
-
-                // Sort domains by navigation order
-                const navigationOrder = session.navigationOrder || [];
-                const orderedDomains = navigationOrder
-                    .map((domainName) => {
-                        return domains.find((d) => d.domain === domainName);
-                    })
-                    .filter(Boolean);
 
                 sessions.push({
                     sessionId: session.sessionId,
@@ -393,9 +537,7 @@ class TabAwareBrowsingTracker {
                     lastUpdate: session.lastUpdate || now,
                     isActive: isActive,
                     isClosed: !!session.closed,
-                    domains: orderedDomains,
-                    totalVisits: totalVisits,
-                    totalDomains: domains.length,
+                    urlSequence: session.urlSequence, // Only this matters now
                 });
             }
 
@@ -408,7 +550,7 @@ class TabAwareBrowsingTracker {
                 totalSessions: sessions.length,
                 totalEdges: (this.data.edges || []).length,
                 totalVisits: sessions.reduce(
-                    (sum, s) => sum + s.totalVisits,
+                    (sum, s) => sum + s.urlSequence.length,
                     0,
                 ),
                 tabRelationships: this.data.tabRelationships || [],
@@ -425,70 +567,6 @@ class TabAwareBrowsingTracker {
                 totalEdges: 0,
                 totalVisits: 0,
             };
-        }
-    }
-
-    addTestData() {
-        try {
-            this.ensureValidData();
-
-            // Create test sessions
-            const testSessions = [
-                {
-                    tabId: 9999,
-                    domains: [
-                        { domain: "google.com", visits: 8 },
-                        { domain: "gmail.com", visits: 3 },
-                        { domain: "youtube.com", visits: 2 },
-                    ],
-                },
-                {
-                    tabId: 9998,
-                    domains: [
-                        { domain: "google.com", visits: 4 },
-                        { domain: "stackoverflow.com", visits: 6 },
-                        { domain: "github.com", visits: 1 },
-                    ],
-                },
-            ];
-
-            testSessions.forEach((testSession) => {
-                const sessionId = "test_session_" + testSession.tabId;
-                const now = Date.now();
-
-                const session = {
-                    sessionId: sessionId,
-                    tabId: testSession.tabId,
-                    created: now,
-                    domains: new Map(),
-                    navigationOrder: [],
-                    urlSequence: [], // Initialize chronological URL sequence
-                    lastUpdate: now,
-                };
-
-                testSession.domains.forEach((domainInfo, index) => {
-                    session.domains.set(domainInfo.domain, {
-                        visitCount: domainInfo.visits,
-                        firstVisit: now + index * 1000,
-                        lastVisit: now + index * 1000 + 60000,
-                        urls: [`https://${domainInfo.domain}`],
-                    });
-                    session.navigationOrder.push(domainInfo.domain);
-                    session.urlSequence.push({
-                        url: `https://${domainInfo.domain}`,
-                        domain: domainInfo.domain,
-                        timestamp: now + index * 1000,
-                        sequenceIndex: index + 1,
-                    });
-                });
-
-                this.data.sessions.set(testSession.tabId, session);
-            });
-
-            this.scheduleSave();
-            console.log("🧪 Test data added with multiple sessions");
-        } catch (error) {
-            console.error("❌ Error adding test data:", error);
         }
     }
 
@@ -537,12 +615,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 totalVisits: data.totalVisits,
             });
             sendResponse(data);
-            return true;
-        }
-
-        if (request.action === "testData") {
-            tracker.addTestData();
-            sendResponse({ success: true });
             return true;
         }
 

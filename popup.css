@@ -3,9 +3,9 @@ body {
     height: 500px;
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
         sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #fffafb;
     color: #333;
 }
 
@@ -13,29 +13,38 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
+    background: #fffafb;
 }
 
 header {
     padding: 20px;
     text-align: center;
-    background: rgba(255, 255, 255, 0.1);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    background: #fffafb;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.logo {
+    width: 24px;
+    height: 24px;
 }
 
 header h1 {
     margin: 0;
     font-size: 18px;
     font-weight: 600;
-    color: #2d3748;
+    color: #5383ec;
 }
 
 .stats {
     display: flex;
     justify-content: space-around;
     padding: 20px;
-    background: rgba(255, 255, 255, 0.7);
+    background: #fffafb;
 }
 
 .stat-item {
@@ -46,7 +55,7 @@ header h1 {
 .stat-number {
     display: block;
     font-size: 24px;
-    font-weight: 700;
+    font-weight: 800;
     color: #4c51bf;
     margin-bottom: 4px;
 }
@@ -56,10 +65,17 @@ header h1 {
     color: #718096;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
 }
 
 .controls {
-    padding: 20px;
+    padding: 0px 20px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.button-row {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
@@ -67,43 +83,49 @@ header h1 {
 
 .primary-btn,
 .secondary-btn,
-.test-btn {
+.clear-btn {
     flex: 1;
     padding: 12px;
     border: none;
     border-radius: 8px;
+    font-family: "Nunito", sans-serif;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
     min-width: 100px;
 }
 
-.test-btn {
-    background: #ffd93d;
-    color: #2d3748;
-    flex-basis: 100%;
-    margin-top: 8px;
-}
-
 .primary-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #5383ec;
     color: white;
 }
 
 .primary-btn:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    background: #4a73d1;
+    box-shadow: 0 4px 12px rgba(83, 131, 236, 0.3);
 }
 
 .secondary-btn {
-    background: rgba(255, 255, 255, 0.8);
+    background: #e2e8f0;
     color: #4a5568;
     border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .secondary-btn:hover {
-    background: rgba(255, 255, 255, 1);
+    background: #cbd5e0;
     transform: translateY(-1px);
+}
+
+.clear-btn {
+    background: #f56565;
+    color: white;
+}
+
+.clear-btn:hover {
+    background: #e53e3e;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
 }
 
 .recent-activity {
@@ -122,9 +144,10 @@ header h1 {
 .activity-list {
     max-height: 150px;
     overflow-y: auto;
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.8);
     border-radius: 8px;
     padding: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 /* Session display styles */
@@ -133,7 +156,7 @@ header h1 {
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 8px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.9);
 }
 
 .session-header {
@@ -146,7 +169,7 @@ header h1 {
 }
 
 .session-header:hover {
-    background: rgba(102, 126, 234, 0.05);
+    background: rgba(83, 131, 236, 0.05);
 }
 
 .session-info {
@@ -199,6 +222,12 @@ header h1 {
 .session-domains {
     font-size: 10px;
     color: #718096;
+}
+
+.session-time {
+    font-size: 11px;
+    font-weight: 600;
+    color: #5383ec;
 }
 
 .expand-icon {

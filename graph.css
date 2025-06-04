@@ -61,14 +61,14 @@ body {
     position: absolute;
     top: 30px;
     right: 30px;
-    background: #ff6b6b;
+    background: #e74c3c;
     color: white;
     padding: 16px 20px;
     border-radius: 12px;
     min-width: 280px;
     max-width: 400px;
     z-index: 100;
-    box-shadow: 0 4px 20px rgba(255, 107, 107, 0.2);
+    box-shadow: 0 4px 20px rgba(231, 76, 60, 0.2);
 }
 
 .url-display-header {
@@ -134,6 +134,8 @@ body {
     color: #636e72;
     margin-bottom: 8px;
     text-transform: lowercase;
+    cursor: help;
+    position: relative;
 }
 
 .metric-value {
@@ -162,6 +164,15 @@ body {
     font-size: 16px;
     color: #4285f4;
     font-weight: bold;
+}
+
+/* Metrics Separator */
+.metrics-separator {
+    width: 2px;
+    height: 50px;
+    background: linear-gradient(to bottom, transparent, #636e72, transparent);
+    opacity: 0.3;
+    margin: 0 20px;
 }
 
 /* Graph Elements */
@@ -228,81 +239,73 @@ body {
 /* Cluster Hulls */
 .cluster-hull {
     fill: rgba(66, 133, 244, 0.05);
-    stroke: #4285f4;
-    stroke-width: 2;
-    stroke-dasharray: 8, 4;
+    stroke: rgba(66, 133, 244, 1);
+    stroke-width: 1.5;
+    stroke-dasharray: 3, 2;
     opacity: 0.7;
 }
 
 .cluster-hull.inactive {
     fill: rgba(99, 110, 114, 0.03);
-    stroke: #636e72;
+    stroke: rgba(99, 110, 114, 0.2);
+    stroke-width: 1;
+    stroke-dasharray: 3, 2;
     opacity: 0.4;
 }
 
 /* Tooltip */
 .tooltip {
     position: absolute;
-    background: #2d3436;
+    background: rgba(0, 0, 0, 0.9);
     color: white;
-    padding: 10px 14px;
+    padding: 12px 16px;
     border-radius: 8px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     pointer-events: none;
     opacity: 0;
     transition: opacity 0.2s ease;
-    z-index: 1000;
-    max-width: 280px;
+    z-index: 10000;
+    max-width: 300px;
     line-height: 1.4;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
 }
 
 .tooltip.show {
     opacity: 1;
 }
 
-/* Persistent tooltips for connected nodes */
+.tooltip em {
+    color: #74b9ff;
+    font-style: normal;
+    font-weight: 600;
+}
+
+/* Persistent Tooltip Styles */
 .persistent-tooltip {
     position: absolute;
-    background: #2d3436;
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 500;
-    pointer-events: auto;
-    opacity: 0.9;
-    z-index: 1000;
-    max-width: 200px;
-    line-height: 1.3;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.95);
+    color: #2d3436;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
     transition: all 0.3s ease;
     cursor: pointer;
 }
 
-.persistent-tooltip.selected-tooltip {
-    background: #4285f4;
-    border: 2px solid #ffffff;
-    font-weight: 600;
-    z-index: 1001;
+.selected-tooltip {
+    background: rgba(66, 133, 244, 0.95);
+    color: white;
+    border-color: #4285f4;
     transform: scale(1.05);
+    z-index: 1001;
     box-shadow: 0 6px 24px rgba(66, 133, 244, 0.4);
 }
 
-.persistent-tooltip.connected-tooltip {
-    background: #636e72;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    opacity: 0.85;
-}
-
-.persistent-tooltip.show {
-    opacity: 0.9;
-}
-
-.persistent-tooltip.selected-tooltip.show {
-    opacity: 1;
+.connected-tooltip {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 /* Loading */
@@ -345,11 +348,12 @@ body {
 }
 
 .controls {
-    position: absolute;
-    top: 20px;
-    right: 20px;
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
     display: flex;
-    gap: 12px;
+    flex-direction: row;
+    gap: 2px;
     z-index: 100;
 }
 

@@ -2,12 +2,30 @@
 <html>
     <head>
         <meta charset="utf-8" />
+        <style>
+            @font-face {
+                font-family: "Nunito";
+                src: url("fonts/Nunito-Medium.ttf") format("truetype");
+                font-weight: 500;
+            }
+            @font-face {
+                font-family: "Nunito";
+                src: url("fonts/Nunito-SemiBold.ttf") format("truetype");
+                font-weight: 600;
+            }
+            @font-face {
+                font-family: "Nunito";
+                src: url("fonts/Nunito-ExtraBold.ttf") format("truetype");
+                font-weight: 800;
+            }
+        </style>
         <link rel="stylesheet" href="popup.css" />
     </head>
     <body>
         <div class="container">
             <header>
-                <h1>🌐 Browsing Graph</h1>
+                <img src="icons/icon48.png" alt="Linx Logo" class="logo" />
+                <h1 style="color: #5383ec">LINKx</h1>
             </header>
 
             <div class="stats">
@@ -17,18 +35,26 @@
                 </div>
                 <div class="stat-item">
                     <span class="stat-number" id="edgeCount">0</span>
-                    <span class="stat-label">Connections</span>
+                    <span class="stat-label">Session Time</span>
                 </div>
                 <div class="stat-item">
                     <span class="stat-number" id="sessionCount">0</span>
-                    <span class="stat-label">Active Tabs</span>
+                    <span class="stat-label">Total Domains</span>
                 </div>
             </div>
 
             <div class="controls">
-                <button id="viewGraph" class="primary-btn">View Graph</button>
-                <button id="clearData" class="secondary-btn">Clear Data</button>
-                <button id="testData" class="test-btn">Add Test Data</button>
+                <div class="button-row">
+                    <button id="pauseTracking" class="secondary-btn">
+                        Pause
+                    </button>
+                    <button id="clearData" class="clear-btn">Clear</button>
+                </div>
+                <div class="button-row">
+                    <button id="viewGraph" class="primary-btn">
+                        View Graph
+                    </button>
+                </div>
             </div>
 
             <div class="recent-activity">
@@ -39,7 +65,19 @@
             </div>
 
             <div class="status">
-                <span id="statusText">🟢 Tracking active</span>
+                <span id="statusText"> Tracking active</span>
+            </div>
+
+            <div class="privacy-section">
+                <div class="privacy-links">
+                    <a href="#" id="privacyInfo" class="privacy-link"
+                        >Privacy Info</a
+                    >
+                    <span class="privacy-separator">•</span>
+                    <a href="#" id="dataSettings" class="privacy-link"
+                        >Data Settings</a
+                    >
+                </div>
             </div>
         </div>
 

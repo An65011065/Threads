@@ -3,6 +3,134 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupEventListeners();
 });
 
+// Helper function to calculate total time for a session
+function calculateSessionTime(session) {
+    if (!session.urlSequence || session.urlSequence.length === 0) {
+        return 0;
+    }
+
+    // Use actual tracked dwell times instead of estimates
+    let totalTime = 0;
+    console.log(
+        `🔍 Calculating session time for session ${
+            session.sessionId || session.tabId
+        }:`,
+    );
+
+    session.urlSequence.forEach((urlItem, index) => {
+        console.log(`  URL ${index}: ${urlItem.url}`);
+        console.log(`    dwellTime: ${urlItem.dwellTime}`);
+        console.log(`    startTime: ${urlItem.startTime}`);
+        console.log(`    endTime: ${urlItem.endTime}`);
+
+        if (urlItem.dwellTime && urlItem.dwellTime > 0) {
+            // Use actual tracked dwell time
+            totalTime += urlItem.dwellTime;
+            console.log(
+                `    ✅ Using dwellTime: ${urlItem.dwellTime}s (total now: ${totalTime}s)`,
+            );
+        } else if (urlItem.startTime && urlItem.endTime) {
+            // Calculate from start/end times if dwell time not set
+            const calculated = Math.max(
+                0.1,
+                (urlItem.endTime - urlItem.startTime) / 1000,
+            );
+            totalTime += calculated;
+            console.log(
+                `    ⚡ Calculated from start/end: ${calculated}s (total now: ${totalTime}s)`,
+            );
+        } else if (urlItem.startTime && !urlItem.endTime) {
+            // For active pages, calculate time from start to now
+            const now = Date.now();
+            const calculated = Math.max(0.1, (now - urlItem.startTime) / 1000);
+            totalTime += calculated;
+            console.log(
+                `    🔄 Active page calculation: ${calculated}s (total now: ${totalTime}s)`,
+            );
+        } else {
+            console.log(`    ❌ No timing data available for this URL`);
+        }
+    });
+
+    console.log(
+        `📊 Final session time: ${totalTime}s (${formatTime(totalTime)})`,
+    );
+    return totalTime;
+}
+
+// Helper function to calculate domain time
+function calculateDomainTime(urls) {
+    let totalTime = 0;
+    urls.forEach((urlData) => {
+        if (typeof urlData === "string") {
+            // Old format - no timing data available
+            return;
+        }
+
+        if (urlData.dwellTime && urlData.dwellTime > 0) {
+            totalTime += urlData.dwellTime;
+        } else if (urlData.startTime && urlData.endTime) {
+            totalTime += Math.max(
+                0.1,
+                (urlData.endTime - urlData.startTime) / 1000,
+            );
+        } else if (urlData.startTime && !urlData.endTime) {
+            const now = Date.now();
+            totalTime += Math.max(0.1, (now - urlData.startTime) / 1000);
+        }
+    });
+    return totalTime;
+}
+
+// Helper function to calculate total time across all sessions
+function calculateTotalSessionTime(data) {
+    if (!data.sessions || data.sessions.length === 0) {
+        return 0;
+    }
+
+    let totalTime = 0;
+    data.sessions.forEach((session) => {
+        totalTime += calculateSessionTime(session);
+    });
+
+    return totalTime;
+}
+
+// Helper function to calculate total unique domains
+function calculateTotalDomains(data) {
+    if (!data.sessions || data.sessions.length === 0) {
+        return 0;
+    }
+
+    const uniqueDomains = new Set();
+    data.sessions.forEach((session) => {
+        if (session.urlSequence) {
+            session.urlSequence.forEach((urlItem) => {
+                if (urlItem.domain) {
+                    uniqueDomains.add(urlItem.domain);
+                }
+            });
+        }
+    });
+
+    return uniqueDomains.size;
+}
+
+// Helper function to format time duration
+function formatTime(seconds) {
+    if (seconds < 60) {
+        return `${Math.round(seconds)}s`;
+    } else if (seconds < 3600) {
+        const minutes = seconds / 60;
+        return minutes >= 10
+            ? `${Math.round(minutes)}m`
+            : `${minutes.toFixed(1)}m`;
+    } else {
+        const hours = seconds / 3600;
+        return `${hours.toFixed(1)}h`;
+    }
+}
+
 async function loadData() {
     try {
         console.log("📞 Requesting data from background script...");
@@ -40,11 +168,16 @@ async function loadData() {
 }
 
 function updateStats(data) {
-    // Fix: Use the correct properties from the background script
-    document.getElementById("nodeCount").textContent = data.totalVisits || 0;
-    document.getElementById("edgeCount").textContent = data.totalEdges || 0;
-    document.getElementById("sessionCount").textContent =
-        data.activeSessions || 0;
+    // Calculate new meaningful metrics
+    const totalVisits = data.totalVisits || 0;
+    const totalSessionTime = calculateTotalSessionTime(data);
+    const totalDomains = calculateTotalDomains(data);
+
+    // Update the display
+    document.getElementById("nodeCount").textContent = totalVisits;
+    document.getElementById("edgeCount").textContent =
+        formatTime(totalSessionTime);
+    document.getElementById("sessionCount").textContent = totalDomains;
 }
 
 function getUrlDisplayText(url) {
@@ -109,14 +242,16 @@ function updateRecentActivity(data) {
         return;
     }
 
-    // Show sessions instead of aggregated domains
+    // Show sessions with URL sequences
     const activeSessions = data.sessions
-        .filter((session) => session.domains && session.domains.length > 0)
+        .filter(
+            (session) => session.urlSequence && session.urlSequence.length > 0,
+        )
         .slice(0, 8); // Show top 8 sessions
 
     if (activeSessions.length === 0) {
         recentList.innerHTML =
-            '<div class="loading">No domain visits recorded yet. Browse some websites!</div>';
+            '<div class="loading">No URL visits recorded yet. Browse some websites!</div>';
         return;
     }
 
@@ -126,17 +261,28 @@ function updateRecentActivity(data) {
             const statusText = session.isActive ? "Active" : "Closed";
             const tabInfo = `Tab ${session.tabId}`;
 
-            // Get current domain (last in navigation order)
-            const currentDomain =
-                session.domains.length > 0
-                    ? session.domains[session.domains.length - 1].domain
-                    : "Unknown";
+            // Get unique domains from URL sequence
+            const domains = new Map();
+            session.urlSequence.forEach((urlItem) => {
+                const domain = urlItem.domain;
+                if (!domains.has(domain)) {
+                    domains.set(domain, []);
+                }
+                domains.get(domain).push(urlItem); // Pass the full urlItem object instead of just URL
+            });
+
+            // Get current domain (last URL's domain)
+            const lastUrl = session.urlSequence[session.urlSequence.length - 1];
+            const currentDomain = lastUrl ? lastUrl.domain : "Unknown";
 
             // Create domain summary
             const domainSummary =
-                session.domains.length > 1
-                    ? `${currentDomain} (+${session.domains.length - 1} more)`
+                domains.size > 1
+                    ? `${currentDomain} (+${domains.size - 1} more)`
                     : currentDomain;
+
+            // Calculate session time
+            const sessionTime = calculateSessionTime(session);
 
             return `
                 <div class="session-item">
@@ -149,43 +295,49 @@ function updateRecentActivity(data) {
                             <div class="session-summary">${domainSummary}</div>
                         </div>
                         <div class="session-stats">
-                            <span class="session-count">${
-                                session.totalVisits
-                            } visits</span>
+                            <span class="session-time">${formatTime(
+                                sessionTime,
+                            )}</span>
                             <span class="session-domains">${
-                                session.totalDomains
+                                domains.size
                             } domains</span>
                         </div>
                     </div>
                     <div class="session-details" style="display: none;">
-                        ${session.domains
-                            .map(
-                                (domain) => `
+                        ${Array.from(domains.entries())
+                            .map(([domain, urlItems]) => {
+                                const domainTime =
+                                    calculateDomainTime(urlItems);
+                                return `
                             <div class="domain-section">
                                 <div class="domain-header">
-                                    <span class="domain-name">${
-                                        domain.domain
-                                    }</span>
-                                    <span class="domain-count">${
-                                        domain.visitCount
-                                    } visits</span>
+                                    <span class="domain-name">${domain}</span>
+                                    <span class="domain-time">${formatTime(
+                                        domainTime,
+                                    )}</span>
                                 </div>
                                 <div class="url-list">
-                                    ${(domain.urls || [])
-                                        .map(
-                                            (url) => `
+                                    ${urlItems
+                                        .map((urlItem) => {
+                                            const url = urlItem.url || urlItem; // Handle both old and new formats
+                                            const timeSpent = urlItem.dwellTime
+                                                ? ` (${formatTime(
+                                                      urlItem.dwellTime,
+                                                  )})`
+                                                : "";
+                                            return `
                                         <div class="url-item">
                                             <span class="url-text" title="${url}">${getUrlDisplayText(
                                                 url,
-                                            )}</span>
+                                            )}${timeSpent}</span>
                                         </div>
-                                    `,
-                                        )
+                                    `;
+                                        })
                                         .join("")}
                                 </div>
                             </div>
-                        `,
-                            )
+                        `;
+                            })
                             .join("")}
                     </div>
                 </div>
@@ -254,16 +406,39 @@ function setupEventListeners() {
         }
     });
 
-    document.getElementById("testData").addEventListener("click", async () => {
-        try {
-            await chrome.runtime.sendMessage({ action: "testData" });
-            await loadData(); // Refresh to show new data
-            showSuccess("Test data added");
-        } catch (error) {
-            console.error("Error adding test data:", error);
-            showError("Failed to add test data");
-        }
-    });
+    document
+        .getElementById("pauseTracking")
+        .addEventListener("click", async () => {
+            try {
+                // Toggle tracking state
+                const response = await chrome.runtime.sendMessage({
+                    action: "toggleTracking",
+                });
+                const button = document.getElementById("pauseTracking");
+
+                if (response && response.isTracking !== undefined) {
+                    if (response.isTracking) {
+                        button.textContent = "Pause";
+                        showSuccess("Tracking resumed");
+                    } else {
+                        button.textContent = "Resume";
+                        showSuccess("Tracking paused");
+                    }
+                } else {
+                    // Fallback: just toggle button text
+                    if (button.textContent === "Pause") {
+                        button.textContent = "Resume";
+                        showSuccess("Tracking paused");
+                    } else {
+                        button.textContent = "Pause";
+                        showSuccess("Tracking resumed");
+                    }
+                }
+            } catch (error) {
+                console.error("Error toggling tracking:", error);
+                showError("Failed to toggle tracking");
+            }
+        });
 }
 
 function showError(message) {
@@ -272,18 +447,18 @@ function showError(message) {
     statusText.style.color = "#e53e3e";
 
     setTimeout(() => {
-        statusText.textContent = "🟢 Tracking active";
+        statusText.textContent = "Tracking active";
         statusText.style.color = "";
     }, 3000);
 }
 
 function showSuccess(message) {
     const statusText = document.getElementById("statusText");
-    statusText.textContent = `✅ ${message}`;
+    statusText.textContent = `${message}`;
     statusText.style.color = "#38a169";
 
     setTimeout(() => {
-        statusText.textContent = "🟢 Tracking active";
+        statusText.textContent = "Tracking active";
         statusText.style.color = "";
     }, 3000);
 }

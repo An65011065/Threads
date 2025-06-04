@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
-    "name": "Browsing Graph Visualizer",
-    "version": "1.0",
+    "name": "Linkx",
+    "version": "1.0.0",
     "description": "Visualize your browsing history as an interactive graph",
 
     "permissions": ["tabs", "storage", "webNavigation"],
