@@ -255,11 +255,25 @@ function updateRecentActivity(data) {
         return;
     }
 
+    // Create a mapping of sessions to sequential tab numbers based on creation time
+    // Sort all sessions by creation time (oldest first) and assign sequential numbers
+    const allSessionsSortedByCreation = [...data.sessions]
+        .filter(
+            (session) => session.urlSequence && session.urlSequence.length > 0,
+        )
+        .sort((a, b) => (a.created || 0) - (b.created || 0));
+
+    const sessionToTabNumber = new Map();
+    allSessionsSortedByCreation.forEach((session, index) => {
+        sessionToTabNumber.set(session.sessionId, index + 1);
+    });
+
     recentList.innerHTML = activeSessions
         .map((session) => {
             const statusIcon = session.isActive ? "🟢" : "🔴";
             const statusText = session.isActive ? "Active" : "Closed";
-            const tabInfo = `Tab ${session.tabId}`;
+            const tabNumber = sessionToTabNumber.get(session.sessionId) || "?";
+            const tabInfo = `Tab ${tabNumber}`;
 
             // Get unique domains from URL sequence
             const domains = new Map();
@@ -439,6 +453,14 @@ function setupEventListeners() {
                 showError("Failed to toggle tracking");
             }
         });
+
+    // Privacy info link
+    document.getElementById("privacyInfo").addEventListener("click", (e) => {
+        e.preventDefault();
+        chrome.tabs.create({
+            url: chrome.runtime.getURL("privacy.html"),
+        });
+    });
 }
 
 function showError(message) {

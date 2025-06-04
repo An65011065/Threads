@@ -23,12 +23,14 @@ class TabAwareBrowsingTracker {
         try {
             await this.loadData();
             this.setupListeners();
+            this.startPeriodicCleanup();
             console.log("✅ Tracker initialized successfully");
         } catch (error) {
             console.error("❌ Error during initialization:", error);
             // Ensure we have valid data even if loading fails
             this.ensureValidData();
             this.setupListeners();
+            this.startPeriodicCleanup();
         }
     }
 
@@ -153,11 +155,7 @@ class TabAwareBrowsingTracker {
                 if (this.data.sessions.has(tabId)) {
                     const session = this.data.sessions.get(tabId);
                     session.closed = Date.now();
-                    // Keep closed sessions for a while for graph purposes
-                    setTimeout(() => {
-                        this.data.sessions.delete(tabId);
-                        this.scheduleSave();
-                    }, 5 * 60 * 1000); // Keep for 5 minutes
+                    // Session will be cleaned up by the 24-hour cleanup cycle
                 }
 
                 // Clean up tracking data
@@ -581,6 +579,67 @@ class TabAwareBrowsingTracker {
             console.error("❌ Error clearing data:", error);
         }
     }
+
+    // Cleanup when service worker stops
+    cleanup() {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
+        if (this.saveTimeout) {
+            clearTimeout(this.saveTimeout);
+            this.saveTimeout = null;
+        }
+    }
+
+    startPeriodicCleanup() {
+        // Clean up old data every hour
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupOldData();
+        }, 60 * 60 * 1000); // Every hour
+
+        // Also run cleanup immediately
+        this.cleanupOldData();
+    }
+
+    cleanupOldData() {
+        try {
+            const now = Date.now();
+            const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+            let cleanedCount = 0;
+
+            // Clean up old sessions
+            for (const [tabId, session] of this.data.sessions) {
+                const sessionAge =
+                    now - (session.lastUpdate || session.created || now);
+
+                if (sessionAge > maxAge) {
+                    this.data.sessions.delete(tabId);
+                    cleanedCount++;
+                }
+            }
+
+            // Clean up old tab relationships (older than 24 hours)
+            const originalRelationshipCount = this.data.tabRelationships.length;
+            this.data.tabRelationships = this.data.tabRelationships.filter(
+                (rel) => {
+                    const relationshipAge = now - rel.timestamp;
+                    return relationshipAge <= maxAge;
+                },
+            );
+            const relationshipsRemoved =
+                originalRelationshipCount - this.data.tabRelationships.length;
+
+            if (cleanedCount > 0 || relationshipsRemoved > 0) {
+                console.log(
+                    `🧹 Cleaned up old data: ${cleanedCount} sessions, ${relationshipsRemoved} relationships`,
+                );
+                this.scheduleSave();
+            }
+        } catch (error) {
+            console.error("❌ Error during cleanup:", error);
+        }
+    }
 }
 
 // Create tracker instance
@@ -631,4 +690,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     return true;
+});
+
+// Cleanup when service worker is about to be terminated
+self.addEventListener("beforeunload", () => {
+    if (tracker) {
+        tracker.cleanup();
+    }
 });
