@@ -207,8 +207,6 @@ class BrowsingGraphVisualizer {
         loading.classList.remove("hidden");
 
         try {
-            console.log("📦 Loading graph data from storage...");
-
             let data = null;
 
             // First, try to load from Chrome storage (real data)
@@ -218,22 +216,13 @@ class BrowsingGraphVisualizer {
                         "graphData",
                     ]);
                     data = result.graphData;
-                    console.log(
-                        "📦 Graph received data from Chrome storage:",
-                        data,
-                    );
 
                     if (data && data.sessions && data.sessions.length > 0) {
-                        console.log(
-                            "✅ Using real browsing data from Chrome storage",
-                        );
                         // Update UI to show real data indicator
                         this.updateDataSourceIndicator("real");
                     }
                 }
-            } catch (chromeError) {
-                console.log("⚠️ Chrome storage not available:", chromeError);
-            }
+            } catch (chromeError) {}
 
             if (!data || !data.sessions || data.sessions.length === 0) {
                 throw new Error(
@@ -262,7 +251,6 @@ class BrowsingGraphVisualizer {
             this.updateMetricsDisplay();
             this.createGraph();
         } catch (error) {
-            console.error("❌ Error loading graph data:", error);
             this.showError(error.message || "Failed to load browsing data");
         } finally {
             loading.classList.add("hidden");
@@ -276,21 +264,11 @@ class BrowsingGraphVisualizer {
         const nodeMap = new Map();
         let nodeId = 0;
 
-        console.log("🐛 DEBUG: Raw data structure:", data);
-
         // Process sessions into nodes and links using chronological URL sequence
         data.sessions.forEach((session, sessionIndex) => {
             if (!session.urlSequence || session.urlSequence.length === 0) {
-                console.log(
-                    `⚠️ Session ${sessionIndex} has no urlSequence, skipping`,
-                );
                 return;
             }
-
-            console.log(`🐛 DEBUG: Session ${sessionIndex}:`, session);
-            console.log(
-                `🔄 Processing ${session.urlSequence.length} URLs in chronological order`,
-            );
 
             const clusterId = session.tabId;
             const clusterColor = this.getClusterColor(sessionIndex);
@@ -312,10 +290,6 @@ class BrowsingGraphVisualizer {
             session.urlSequence.forEach((urlItem, sequenceIndex) => {
                 // Add safety checks for urlItem properties
                 if (!urlItem || typeof urlItem !== "object") {
-                    console.log(
-                        `⚠️ Invalid urlItem at sequence ${sequenceIndex}:`,
-                        urlItem,
-                    );
                     return;
                 }
 
@@ -323,10 +297,6 @@ class BrowsingGraphVisualizer {
 
                 // Ensure we have at least url and domain
                 if (!url) {
-                    console.log(
-                        `⚠️ Missing URL at sequence ${sequenceIndex}:`,
-                        urlItem,
-                    );
                     return;
                 }
 
@@ -336,12 +306,6 @@ class BrowsingGraphVisualizer {
                 // Normalize URL to prevent duplicates from slight variations
                 const normalizedUrl = this.normalizeUrl(url);
                 const nodeKey = normalizedUrl; // Use just the normalized URL as key (global deduplication)
-
-                console.log(
-                    `🐛 DEBUG: Processing URL ${sequenceIndex + 1}/${
-                        session.urlSequence.length
-                    }: ${url} → ${normalizedUrl}`,
-                );
 
                 if (!nodeMap.has(nodeKey)) {
                     // Create new node for first visit to this URL
@@ -393,10 +357,6 @@ class BrowsingGraphVisualizer {
                     if (!this.clusters.get(clusterId).firstUrl) {
                         this.clusters.get(clusterId).firstUrl = normalizedUrl;
                     }
-
-                    console.log(
-                        `🆕 Created new node: ${nodeKey} (ID: ${node.id}) - Visit count: ${node.visitCount}`,
-                    );
                 } else {
                     // REVISIT: Add another visit to existing node
                     const existingNode = nodeMap.get(nodeKey);
@@ -441,18 +401,10 @@ class BrowsingGraphVisualizer {
                         existingNode.returnVelocities[
                             existingNode.returnVelocities.length - 1
                         ];
-
-                    console.log(
-                        `🔄 Revisit detected: ${normalizedUrl} - Visit count: ${previousCount} → ${existingNode.visitCount} (Session: ${clusterId})`,
-                    );
                 }
 
                 // Create links based on actual chronological browsing sequence
                 if (previousNodeKey && previousNodeKey !== nodeKey) {
-                    console.log(
-                        `🔗 Creating link: ${previousNodeKey} → ${nodeKey}`,
-                    );
-
                     const sourceNode = nodeMap.get(previousNodeKey);
                     const targetNode = nodeMap.get(nodeKey);
 
@@ -470,9 +422,6 @@ class BrowsingGraphVisualizer {
                                 (existingLink.weight || 1) + 1;
                             existingLink.traversalCount =
                                 (existingLink.traversalCount || 1) + 1;
-                            console.log(
-                                `🔗 Link weight increased: ${sourceNode.url} → ${targetNode.url} (weight: ${existingLink.weight})`,
-                            );
                         } else {
                             // Create new directed link
                             this.links.push({
@@ -485,14 +434,8 @@ class BrowsingGraphVisualizer {
                                 sourceUrl: sourceNode.url,
                                 targetUrl: targetNode.url,
                             });
-                            console.log(
-                                `🆕 New link: ${sourceNode.url} → ${targetNode.url}`,
-                            );
                         }
                     } else {
-                        console.log(
-                            `❌ Could not find nodes for link: ${previousNodeKey} → ${nodeKey}`,
-                        );
                     }
                 }
 
@@ -500,10 +443,6 @@ class BrowsingGraphVisualizer {
                 previousNodeKey = nodeKey;
             });
         });
-
-        console.log(
-            `📊 Processed: ${this.nodes.length} unique nodes, ${this.links.length} directed links, ${this.clusters.size} clusters`,
-        );
 
         // Process inter-tab relationships to create cross-cluster connections
         this.processInterTabRelationships(data, nodeMap);
@@ -516,23 +455,10 @@ class BrowsingGraphVisualizer {
         );
 
         if (revisitStats.length > 0) {
-            console.log(
-                `🔄 ${
-                    revisitStats.length
-                } nodes have multiple visits, max visits: ${Math.max(
-                    ...revisitStats.map((n) => n.visitCount),
-                )}`,
-            );
         }
         if (loopLinks.length > 0) {
-            console.log(
-                `🔗 ${loopLinks.length} links have multiple traversals, creating navigation patterns`,
-            );
         }
         if (interClusterLinks.length > 0) {
-            console.log(
-                `🌉 ${interClusterLinks.length} inter-cluster links created from tab relationships`,
-            );
         }
 
         // Log the actual URL sequence for debugging
@@ -548,39 +474,20 @@ class BrowsingGraphVisualizer {
                         }
                     })
                     .join(" → ");
-
-                console.log(
-                    `📍 Cluster ${clusterId} REAL chronological sequence: ${sequence}${
-                        cluster.urlSequence.length > 10 ? "..." : ""
-                    }`,
-                );
-                console.log(
-                    `⏱️ Cluster ${clusterId} total time: ${this.formatDwellTime(
-                        cluster.totalTime,
-                    )} (${cluster.nodes.length} nodes)`,
-                );
             }
         });
     }
 
     processInterTabRelationships(data, nodeMap) {
         if (!data.tabRelationships || data.tabRelationships.length === 0) {
-            console.log("📭 No inter-tab relationships to process");
             return;
         }
-
-        console.log(
-            `🌉 Processing ${data.tabRelationships.length} inter-tab relationships...`,
-        );
 
         data.tabRelationships.forEach((relationship, index) => {
             const { openerUrl, targetUrl, parentTabId, childTabId } =
                 relationship;
 
             if (!openerUrl || !targetUrl) {
-                console.log(
-                    `⚠️ Skipping incomplete relationship ${index}: missing URLs`,
-                );
                 return;
             }
 
@@ -593,15 +500,6 @@ class BrowsingGraphVisualizer {
             const targetNode = nodeMap.get(normalizedTargetUrl);
 
             if (!sourceNode || !targetNode) {
-                console.log(
-                    `⚠️ Could not find nodes for inter-tab relationship:`,
-                    {
-                        openerUrl: normalizedOpenerUrl,
-                        targetUrl: normalizedTargetUrl,
-                        sourceFound: !!sourceNode,
-                        targetFound: !!targetNode,
-                    },
-                );
                 return;
             }
 
@@ -619,9 +517,6 @@ class BrowsingGraphVisualizer {
                     (existingInterTabLink.weight || 1) + 1;
                 existingInterTabLink.traversalCount =
                     (existingInterTabLink.traversalCount || 1) + 1;
-                console.log(
-                    `🌉 Inter-tab link weight increased: ${sourceNode.url} → ${targetNode.url} (weight: ${existingInterTabLink.weight})`,
-                );
             } else {
                 // Create new inter-tab link
                 const interTabLink = {
@@ -638,9 +533,6 @@ class BrowsingGraphVisualizer {
                 };
 
                 this.links.push(interTabLink);
-                console.log(
-                    `🌉 Created inter-tab link: ${sourceNode.url} (tab ${parentTabId}) → ${targetNode.url} (tab ${childTabId})`,
-                );
             }
         });
     }
@@ -743,26 +635,6 @@ class BrowsingGraphVisualizer {
         this.calculateInformationTheoreticMetrics();
 
         // Log some key insights for debugging
-        console.log("🧠 Advanced Network Science Metrics Calculated:");
-        console.log(
-            `   📊 PageRank Top Node: ${this.getTopNodeByCentrality(
-                "pageRank",
-            )}`,
-        );
-        console.log(`   🌐 Network Diameter: ${this.networkMetrics.diameter}`);
-        console.log(
-            `   🔄 Small-worldness: ${this.networkMetrics.smallWorldness.toFixed(
-                3,
-            )}`,
-        );
-        console.log(
-            `   ⚡ Burstiness: ${this.networkMetrics.burstiness.toFixed(3)}`,
-        );
-        console.log(
-            `   🎯 Session Coherence: ${this.networkMetrics.sessionCoherence.toFixed(
-                1,
-            )}%`,
-        );
 
         this.calculateTotalSessionTime();
     }
@@ -771,9 +643,6 @@ class BrowsingGraphVisualizer {
         let totalTime = 0;
 
         if (!this.nodes || !Array.isArray(this.nodes)) {
-            console.log(
-                "⚠️ No nodes array found for total session time calculation",
-            );
             this.networkMetrics.totalSessionTime = 0;
             return;
         }
@@ -785,9 +654,6 @@ class BrowsingGraphVisualizer {
         });
 
         this.networkMetrics.totalSessionTime = totalTime;
-        console.log(
-            `📊 Total session time calculated: ${totalTime.toFixed(1)}s`,
-        );
     }
 
     calculateSocialTime() {
@@ -857,11 +723,6 @@ class BrowsingGraphVisualizer {
         });
 
         this.networkMetrics.socialTime = socialTime;
-        console.log(
-            `📱 Social time calculated: ${socialTime.toFixed(
-                1,
-            )}s across social platforms`,
-        );
     }
 
     calculateNetworkDensity() {
@@ -1971,8 +1832,6 @@ class BrowsingGraphVisualizer {
     }
 
     showError(message) {
-        console.error(message);
-
         const container = this.svg.select(".graph-container");
         container.selectAll("*").remove();
 
@@ -2566,7 +2425,6 @@ class BrowsingGraphVisualizer {
     normalizeUrl(url) {
         // Add safety check for undefined/null URLs
         if (!url || typeof url !== "string") {
-            console.warn("Invalid URL provided to normalizeUrl:", url);
             return "invalid-url";
         }
 
@@ -2626,7 +2484,6 @@ class BrowsingGraphVisualizer {
             return normalizedUrl;
         } catch (error) {
             // If URL parsing fails, return original URL or fallback
-            console.warn("Failed to normalize URL:", url, error);
             return url || "invalid-url";
         }
     }
@@ -2726,7 +2583,6 @@ class BrowsingGraphVisualizer {
 
     openNodeUrl(node) {
         if (!node.url) {
-            console.warn("No URL found for node:", node);
             return;
         }
 
@@ -2741,9 +2597,6 @@ class BrowsingGraphVisualizer {
             chrome.tabs.create({ url: fullUrl });
         } catch (error) {
             // Fallback for non-extension environments
-            console.warn(
-                "Chrome extension API not available, using window.open",
-            );
             window.open(fullUrl, "_blank");
         }
     }
@@ -3685,10 +3538,6 @@ class BrowsingGraphVisualizer {
                 return sourceMatch || targetMatch ? 0.6 : 0.1;
             });
         }
-
-        console.log(
-            `Found ${matchingNodes.length} nodes matching "${keyword}"`,
-        );
     }
 
     clearNodeHighlight() {
@@ -3713,15 +3562,12 @@ class BrowsingGraphVisualizer {
 
     setDefaultDateTime() {
         const timeElement = document.getElementById("evolution-time-main");
-        console.log("Setting default date/time, element found:", timeElement);
 
         if (timeElement) {
             const now = new Date();
             const formattedDateTime = `${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
             timeElement.textContent = formattedDateTime;
-            console.log("Set date/time to:", formattedDateTime);
         } else {
-            console.error("evolution-time-main element not found!");
         }
     }
 
@@ -3730,7 +3576,6 @@ class BrowsingGraphVisualizer {
         // Add CSV button to the existing controls container
         const controlsContainer = document.querySelector(".controls");
         if (!controlsContainer) {
-            console.error("Controls container not found");
             return;
         }
 
@@ -3915,8 +3760,6 @@ class BrowsingGraphVisualizer {
         // Export all data types
         this.exportNodesCSV();
         setTimeout(() => this.exportLinksCSV(), 100);
-
-        console.log("Complete dataset exported as separate CSV files");
     }
 
     escapeCSV(str) {
@@ -3938,8 +3781,6 @@ class BrowsingGraphVisualizer {
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
         }
-
-        console.log(`CSV exported: ${filename}`);
     }
 
     setupStorageListener() {
@@ -3951,9 +3792,6 @@ class BrowsingGraphVisualizer {
         ) {
             chrome.storage.onChanged.addListener((changes, areaName) => {
                 if (areaName === "local" && changes.graphData) {
-                    console.log(
-                        "📡 Detected data change in storage, refreshing graph...",
-                    );
                     this.loadData();
                 }
             });
@@ -3988,16 +3826,11 @@ class BrowsingGraphVisualizer {
                         newSessionCount !== currentSessionCount ||
                         newTotalVisits !== currentTotalVisits
                     ) {
-                        console.log(
-                            "📡 Detected new browsing data, refreshing graph...",
-                        );
                         this.loadData();
                     }
                 }
             }
-        } catch (error) {
-            console.log("⚠️ Error checking for data updates:", error);
-        }
+        } catch (error) {}
     }
 
     updateDataSourceIndicator(dataType) {

@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "LINKx",
     "version": "1.0.0",
-    "description": "Visualize your browsing history as an interactive graph",
+    "description": "Visualize your browsing sessions as an interactive network graph",
 
     "permissions": ["tabs", "storage", "webNavigation"],
 

@@ -11,24 +11,11 @@ function calculateSessionTime(session) {
 
     // Use actual tracked dwell times instead of estimates
     let totalTime = 0;
-    console.log(
-        `🔍 Calculating session time for session ${
-            session.sessionId || session.tabId
-        }:`,
-    );
 
     session.urlSequence.forEach((urlItem, index) => {
-        console.log(`  URL ${index}: ${urlItem.url}`);
-        console.log(`    dwellTime: ${urlItem.dwellTime}`);
-        console.log(`    startTime: ${urlItem.startTime}`);
-        console.log(`    endTime: ${urlItem.endTime}`);
-
         if (urlItem.dwellTime && urlItem.dwellTime > 0) {
             // Use actual tracked dwell time
             totalTime += urlItem.dwellTime;
-            console.log(
-                `    ✅ Using dwellTime: ${urlItem.dwellTime}s (total now: ${totalTime}s)`,
-            );
         } else if (urlItem.startTime && urlItem.endTime) {
             // Calculate from start/end times if dwell time not set
             const calculated = Math.max(
@@ -36,25 +23,15 @@ function calculateSessionTime(session) {
                 (urlItem.endTime - urlItem.startTime) / 1000,
             );
             totalTime += calculated;
-            console.log(
-                `    ⚡ Calculated from start/end: ${calculated}s (total now: ${totalTime}s)`,
-            );
         } else if (urlItem.startTime && !urlItem.endTime) {
             // For active pages, calculate time from start to now
             const now = Date.now();
             const calculated = Math.max(0.1, (now - urlItem.startTime) / 1000);
             totalTime += calculated;
-            console.log(
-                `    🔄 Active page calculation: ${calculated}s (total now: ${totalTime}s)`,
-            );
         } else {
-            console.log(`    ❌ No timing data available for this URL`);
         }
     });
 
-    console.log(
-        `📊 Final session time: ${totalTime}s (${formatTime(totalTime)})`,
-    );
     return totalTime;
 }
 
@@ -133,11 +110,7 @@ function formatTime(seconds) {
 
 async function loadData() {
     try {
-        console.log("📞 Requesting data from background script...");
-
         const data = await chrome.runtime.sendMessage({ action: "getData" });
-
-        console.log("📦 Received data:", data);
 
         // Handle case where data is undefined or null
         if (!data) {
@@ -151,7 +124,6 @@ async function loadData() {
         updateStats(data);
         updateRecentActivity(data);
     } catch (error) {
-        console.error("❌ Error loading data:", error);
         showError("Failed to load browsing data");
 
         // Show default values when data loading fails
@@ -398,7 +370,6 @@ function setupEventListeners() {
                 showError("No data available for graph");
             }
         } catch (error) {
-            console.error("Error opening graph:", error);
             showError("Failed to open graph");
         }
     });
@@ -414,7 +385,6 @@ function setupEventListeners() {
                 await loadData(); // Refresh to show cleared data
                 showSuccess("Data cleared successfully");
             } catch (error) {
-                console.error("Error clearing data:", error);
                 showError("Failed to clear data");
             }
         }
@@ -449,7 +419,6 @@ function setupEventListeners() {
                     }
                 }
             } catch (error) {
-                console.error("Error toggling tracking:", error);
                 showError("Failed to toggle tracking");
             }
         });

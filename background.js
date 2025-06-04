@@ -1,7 +1,3 @@
-// Tab-aware browsing tracker with proper visit counting
-
-console.log("🎯 Browsing Graph Extension - Starting...");
-
 class TabAwareBrowsingTracker {
     constructor() {
         // Initialize with proper defaults
@@ -24,9 +20,7 @@ class TabAwareBrowsingTracker {
             await this.loadData();
             this.setupListeners();
             this.startPeriodicCleanup();
-            console.log("✅ Tracker initialized successfully");
         } catch (error) {
-            console.error("❌ Error during initialization:", error);
             // Ensure we have valid data even if loading fails
             this.ensureValidData();
             this.setupListeners();
@@ -50,23 +44,13 @@ class TabAwareBrowsingTracker {
     }
 
     setupListeners() {
-        console.log("Setting up tab-aware listeners...");
-
         // Track new tabs (new sessions)
         chrome.tabs.onCreated.addListener((tab) => {
             try {
                 const sessionId = this.generateSessionId();
-                console.log("🆕 New tab/session:", tab.id, sessionId);
 
                 // Track tab relationships (parent-child)
                 if (tab.openerTabId) {
-                    console.log(
-                        "🔗 Tab",
-                        tab.id,
-                        "opened from tab",
-                        tab.openerTabId,
-                    );
-
                     // Get the current URL from the opener tab
                     this.getOpenerTabUrl(tab.openerTabId).then((openerUrl) => {
                         const relationship = {
@@ -78,10 +62,7 @@ class TabAwareBrowsingTracker {
                         };
 
                         this.data.tabRelationships.push(relationship);
-                        console.log(
-                            "🔗 Inter-tab relationship tracked:",
-                            relationship,
-                        );
+
                         this.scheduleSave();
                     });
                 }
@@ -94,9 +75,7 @@ class TabAwareBrowsingTracker {
                     urlSequence: [], // Only track URL sequence
                     lastUpdate: Date.now(),
                 });
-            } catch (error) {
-                console.error("❌ Error in onCreated:", error);
-            }
+            } catch (error) {}
         });
 
         // Track navigation within tabs
@@ -108,47 +87,35 @@ class TabAwareBrowsingTracker {
                     !tab.url.startsWith("chrome://") &&
                     !tab.url.startsWith("chrome-extension://")
                 ) {
-                    console.log("📄 Page loaded in tab", tabId, ":", tab.url);
                     this.handleNavigation(tabId, tab.url);
 
                     // Update any pending inter-tab relationships with the target URL
                     this.updatePendingTabRelationships(tabId, tab.url);
                 }
-            } catch (error) {
-                console.error("❌ Error in onUpdated:", error);
-            }
+            } catch (error) {}
         });
 
         // Track tab activation (switching between tabs)
         chrome.tabs.onActivated.addListener((activeInfo) => {
             try {
-                console.log("🔄 Tab activated:", activeInfo.tabId);
                 this.handleTabActivation(activeInfo.tabId);
-            } catch (error) {
-                console.error("❌ Error in onActivated:", error);
-            }
+            } catch (error) {}
         });
 
         // Track window focus changes
         chrome.windows.onFocusChanged.addListener((windowId) => {
             try {
                 if (windowId === chrome.windows.WINDOW_ID_NONE) {
-                    console.log("🔍 Browser lost focus");
                     this.handleBrowserFocusChange(false);
                 } else {
-                    console.log("🔍 Browser gained focus");
                     this.handleBrowserFocusChange(true);
                 }
-            } catch (error) {
-                console.error("❌ Error in onFocusChanged:", error);
-            }
+            } catch (error) {}
         });
 
         // Clean up when tabs are closed
         chrome.tabs.onRemoved.addListener((tabId) => {
             try {
-                console.log("❌ Tab closed:", tabId);
-
                 // Finalize time tracking for this tab
                 this.finalizePreviousPageTime(tabId);
 
@@ -163,12 +130,8 @@ class TabAwareBrowsingTracker {
                 if (this.focusedTabId === tabId) {
                     this.focusedTabId = null;
                 }
-            } catch (error) {
-                console.error("❌ Error in onRemoved:", error);
-            }
+            } catch (error) {}
         });
-
-        console.log("✅ Tab-aware listeners set up");
     }
 
     generateSessionId() {
@@ -181,7 +144,6 @@ class TabAwareBrowsingTracker {
             const openerTab = await chrome.tabs.get(openerTabId);
             return openerTab.url || null;
         } catch (error) {
-            console.warn("❌ Could not get opener tab URL:", error);
             return null;
         }
     }
@@ -195,23 +157,12 @@ class TabAwareBrowsingTracker {
 
             pendingRelationships.forEach((rel) => {
                 rel.targetUrl = url;
-                console.log("🎯 Inter-tab relationship completed:", {
-                    from: rel.openerUrl,
-                    to: rel.targetUrl,
-                    parentTab: rel.parentTabId,
-                    childTab: rel.childTabId,
-                });
             });
 
             if (pendingRelationships.length > 0) {
                 this.scheduleSave();
             }
-        } catch (error) {
-            console.error(
-                "❌ Error updating pending tab relationships:",
-                error,
-            );
-        }
+        } catch (error) {}
     }
 
     updateSessionActivity(tabId) {
@@ -220,9 +171,7 @@ class TabAwareBrowsingTracker {
             if (session) {
                 session.lastUpdate = Date.now();
             }
-        } catch (error) {
-            console.error("❌ Error updating session activity:", error);
-        }
+        } catch (error) {}
     }
 
     handleNavigation(tabId, url) {
@@ -237,11 +186,7 @@ class TabAwareBrowsingTracker {
             let session = this.data.sessions.get(tabId);
             if (!session) {
                 const sessionId = this.generateSessionId();
-                console.log(
-                    "📝 Creating new session for existing tab:",
-                    tabId,
-                    sessionId,
-                );
+
                 session = {
                     sessionId: sessionId,
                     tabId: tabId,
@@ -258,8 +203,6 @@ class TabAwareBrowsingTracker {
 
             const domain = new URL(url).hostname;
             const now = Date.now();
-
-            console.log("🔍 Processing navigation in tab", tabId, "to:", url);
 
             // Add URL to chronological sequence with start time
             const urlVisit = {
@@ -284,19 +227,8 @@ class TabAwareBrowsingTracker {
                 urlVisitIndex: session.urlSequence.length - 1, // Reference to the visit in urlSequence
             });
 
-            console.log("📊 Navigation tracked with timing:", {
-                domain,
-                tabId,
-                sessionId: session.sessionId,
-                totalUrlsInSequence: session.urlSequence.length,
-                url: url,
-                startTime: now,
-            });
-
             this.scheduleSave();
-        } catch (error) {
-            console.error("❌ Error handling navigation:", error);
-        }
+        } catch (error) {}
     }
 
     finalizePreviousPageTime(tabId) {
@@ -323,17 +255,9 @@ class TabAwareBrowsingTracker {
             urlVisit.endTime = now;
             urlVisit.dwellTime = Math.max(0.1, dwellTime); // Minimum 0.1 seconds
 
-            console.log(
-                `⏱️ Finalized page time: ${dwellTime.toFixed(1)}s on ${
-                    activePage.url
-                }`,
-            );
-
             // Remove from active tracking
             this.activePages.delete(tabId);
-        } catch (error) {
-            console.error("❌ Error finalizing page time:", error);
-        }
+        } catch (error) {}
     }
 
     handleTabActivation(tabId) {
@@ -350,29 +274,23 @@ class TabAwareBrowsingTracker {
             this.resumeTimeTracking(tabId);
 
             this.updateSessionActivity(tabId);
-        } catch (error) {
-            console.error("❌ Error handling tab activation:", error);
-        }
+        } catch (error) {}
     }
 
     handleBrowserFocusChange(hasFocus) {
         try {
             if (!hasFocus) {
                 // Browser lost focus - pause all time tracking
-                console.log("⏸️ Pausing time tracking (browser unfocused)");
                 for (const tabId of this.activePages.keys()) {
                     this.pauseTimeTracking(tabId);
                 }
             } else {
                 // Browser gained focus - resume tracking for focused tab
-                console.log("▶️ Resuming time tracking (browser focused)");
                 if (this.focusedTabId) {
                     this.resumeTimeTracking(this.focusedTabId);
                 }
             }
-        } catch (error) {
-            console.error("❌ Error handling browser focus change:", error);
-        }
+        } catch (error) {}
     }
 
     pauseTimeTracking(tabId) {
@@ -397,16 +315,8 @@ class TabAwareBrowsingTracker {
 
                 // Mark as paused
                 activePage.pausedAt = now;
-
-                console.log(
-                    `⏸️ Paused tracking for tab ${tabId}, accumulated ${sessionTime.toFixed(
-                        1,
-                    )}s`,
-                );
             }
-        } catch (error) {
-            console.error("❌ Error pausing time tracking:", error);
-        }
+        } catch (error) {}
     }
 
     resumeTimeTracking(tabId) {
@@ -419,11 +329,7 @@ class TabAwareBrowsingTracker {
             // Reset start time for resumed tracking
             activePage.startTime = now;
             delete activePage.pausedAt;
-
-            console.log(`▶️ Resumed tracking for tab ${tabId}`);
-        } catch (error) {
-            console.error("❌ Error resuming time tracking:", error);
-        }
+        } catch (error) {}
     }
 
     scheduleSave() {
@@ -454,13 +360,7 @@ class TabAwareBrowsingTracker {
             };
 
             await chrome.storage.local.set({ browsingData: dataToSave });
-            console.log("💾 Data saved:", {
-                sessions: sessionsArray.length,
-                edges: (this.data.edges || []).length,
-            });
-        } catch (error) {
-            console.error("❌ Error saving data:", error);
-        }
+        } catch (error) {}
     }
 
     async loadData() {
@@ -491,17 +391,9 @@ class TabAwareBrowsingTracker {
                 )
                     ? data.tabRelationships
                     : [];
-
-                console.log("📖 Loaded data:", {
-                    sessions: this.data.sessions.size,
-                    edges: this.data.edges.length,
-                    tabRelationships: this.data.tabRelationships.length,
-                });
             } else {
-                console.log("📖 No saved data found, starting fresh");
             }
         } catch (error) {
-            console.error("❌ Error loading data:", error);
             // Reset to defaults on error
             this.data = {
                 sessions: new Map(),
@@ -554,10 +446,8 @@ class TabAwareBrowsingTracker {
                 tabRelationships: this.data.tabRelationships || [],
             };
 
-            console.log("📤 getCurrentData result:", result);
             return result;
         } catch (error) {
-            console.error("❌ Error in getCurrentData:", error);
             return {
                 sessions: [],
                 activeSessions: 0,
@@ -574,10 +464,7 @@ class TabAwareBrowsingTracker {
             this.data.edges = [];
             this.data.tabRelationships = [];
             this.saveData();
-            console.log("🗑️ All data cleared");
-        } catch (error) {
-            console.error("❌ Error clearing data:", error);
-        }
+        } catch (error) {}
     }
 
     // Cleanup when service worker stops
@@ -631,14 +518,9 @@ class TabAwareBrowsingTracker {
                 originalRelationshipCount - this.data.tabRelationships.length;
 
             if (cleanedCount > 0 || relationshipsRemoved > 0) {
-                console.log(
-                    `🧹 Cleaned up old data: ${cleanedCount} sessions, ${relationshipsRemoved} relationships`,
-                );
                 this.scheduleSave();
             }
-        } catch (error) {
-            console.error("❌ Error during cleanup:", error);
-        }
+        } catch (error) {}
     }
 }
 
@@ -649,30 +531,20 @@ let tracker;
 (async () => {
     try {
         tracker = new TabAwareBrowsingTracker();
-        console.log("🚀 Tab-aware background script ready!");
-    } catch (error) {
-        console.error("❌ Failed to initialize tracker:", error);
-    }
+    } catch (error) {}
 })();
 
 // Handle popup requests
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log("📩 Message received:", request.action);
-
     try {
         if (!tracker) {
-            console.error("❌ Tracker not initialized");
             sendResponse({ error: "Tracker not initialized" });
             return true;
         }
 
         if (request.action === "getData") {
             const data = tracker.getCurrentData();
-            console.log("📤 Sending data:", {
-                totalSessions: data.totalSessions,
-                activeSessions: data.activeSessions,
-                totalVisits: data.totalVisits,
-            });
+
             sendResponse(data);
             return true;
         }
@@ -685,7 +557,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         sendResponse({ error: "Unknown action" });
     } catch (error) {
-        console.error("❌ Error handling message:", error);
         sendResponse({ error: error.message });
     }
 
