@@ -2,9 +2,9 @@
     "manifest_version": 3,
     "name": "LINKx",
     "version": "1.0.0",
-    "description": "Visualize your browsing sessions as an interactive network graph",
+    "description": "See Your History Like Never Before",
 
-    "permissions": ["tabs", "storage", "webNavigation"],
+    "permissions": ["tabs", "storage"],
 
     "background": {
         "service_worker": "background.js"
